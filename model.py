@@ -5,8 +5,9 @@ from torch.nn import functional as F
 class DeepT(torch.nn.Module):
     """ Deep tunnelling for Refinement Operators"""
 
-    def __init__(self, args):
+    def __init__(self,args):
         super(DeepT, self).__init__()
+        assert args
 
         self.embedding_dim = args['num_dim']
         self.num_instances = args['num_instances']

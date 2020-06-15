@@ -1,18 +1,16 @@
-"""
-differentiable_concept_learning.py illustrates one of our research idea.
-"""
+import json
 import random
 import torch
 from torch.utils.data import DataLoader
-from OntoPy import Data, KnowledgeBase, Refinement
-from OntoPy.core.util import create_experiment_folder, create_logger,TorchData
+from ontolearn import Data, KnowledgeBase, Refinement
+from ontolearn.util import create_experiment_folder, create_logger
 from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 from model import DeepT
 import pandas as pd
 import numpy as np
 import umap
-
+from helper_classes import TorchData
 RANDOM_SEED = 0
 random.seed(RANDOM_SEED)
 torch.manual_seed(RANDOM_SEED)
@@ -22,7 +20,7 @@ storage_path, _ = create_experiment_folder(folder_name='Log')
 logger = create_logger(name='DeepT', p=storage_path)
 
 
-path = 'data/biopax.owl'
+path = 'data/family-benchmark_rich_background.owl'
 kb = KnowledgeBase(path=path)
 logger.info('Deep tunnelling for Refinement Operator'.format())
 logger.info('Knowledgebase:{0}'.format(kb.name))
@@ -41,7 +39,7 @@ params = {
     'root_concept': kb.thing,
     'num_of_times_sample_per_concept': 1,
     'refinement_operator': rho,
-    'flag_for_plotting': False
+    'flag_for_plotting': True
 }
 # Generate concepts and prune those ones that do not satisfy the provided constraint.
 concepts = [concept for concept in data.generate_concepts(**params) if
@@ -65,7 +63,18 @@ dataloader = DataLoader(TorchData(X, y), batch_size=params['batch_size'], shuffl
 
 logger.info('Number of unique concepts in training split:{0}\tNumber of data-points {1}'.format(len(labels), len(X)))
 
+
 model = DeepT(params)
+
+
+with open(storage_path + '/parameters.json', 'w') as file_descriptor:
+    temp={'num_dim':params['num_dim'],
+          'num_instances':params['num_instances'],
+          'num_of_inputs_for_model': params['num_of_inputs_for_model'],
+          'num_of_outputs':params['num_of_outputs']}
+    json.dump(temp, file_descriptor,sort_keys=True,indent=3)
+    del temp
+
 model.init()
 opt = torch.optim.Adam(model.parameters())
 
@@ -131,6 +140,7 @@ if params['flag_for_plotting']:
     low_embd = reducer.fit_transform(embeddings)
     fig, ax = plt.subplots()
     ax.scatter(low_embd[:, 0], low_embd[:, 1])
+    plt.savefig(storage_path + '/ScatterPlotOfUMAP_EMB')
     # for i, txt in enumerate(data.individuals):
     #    ax.annotate(txt, (low_embd[i, 0], low_embd[i, 1]))
     plt.show()
