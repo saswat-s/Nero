@@ -2,32 +2,34 @@ import torch
 from torch.nn.init import xavier_normal_
 from torch.nn import functional as F
 
+
 class DeepT(torch.nn.Module):
     """ Deep tunnelling for Refinement Operators"""
 
-    def __init__(self,args):
+    def __init__(self, params):
         super(DeepT, self).__init__()
-        assert args
+        assert params
 
-        self.embedding_dim = args['num_dim']
-        self.num_instances = args['num_instances']
-        self.num_outputs = args['num_of_outputs']
-        self.embedding = torch.nn.Embedding(args['num_instances'], self.embedding_dim, padding_idx=0)
+        self.embedding_dim = params['num_dim']
+        self.num_instances = params['num_instances']
+        self.num_outputs = params['num_of_outputs']
+        self.num_of_inputs_for_model = params['num_of_inputs_for_model']
+
+        self.embedding = torch.nn.Embedding(self.num_instances, self.embedding_dim, padding_idx=0)
         self.bn1_emb = torch.nn.BatchNorm1d(1)
 
-        self.fc1 = torch.nn.Linear(self.embedding_dim*2,
-                                   self.embedding_dim * args['num_of_inputs_for_model'])
-        self.bn1_h1 = torch.nn.BatchNorm1d(self.embedding_dim * args['num_of_inputs_for_model'])
+        self.fc1 = torch.nn.Linear(self.embedding_dim * self.num_of_inputs_for_model,self.embedding_dim * self.num_of_inputs_for_model)
+        self.bn1_h1 = torch.nn.BatchNorm1d(self.embedding_dim * self.num_of_inputs_for_model)
 
-        self.fc2 = torch.nn.Linear(self.embedding_dim * args['num_of_inputs_for_model'],
-                                   self.embedding_dim * args['num_of_inputs_for_model'])
-        self.bn1_h2 = torch.nn.BatchNorm1d(self.embedding_dim * args['num_of_inputs_for_model'])
+        self.fc2 = torch.nn.Linear(self.embedding_dim * self.num_of_inputs_for_model,self.embedding_dim * self.num_of_inputs_for_model)
 
-        self.fc3 = torch.nn.Linear(self.embedding_dim * args['num_of_inputs_for_model'], args['num_of_outputs'])
-        self.bn1_h3 = torch.nn.BatchNorm1d(args['num_of_outputs'])
+        self.bn1_h2 = torch.nn.BatchNorm1d(self.embedding_dim * self.num_of_inputs_for_model)
 
-        self.loss = torch.nn.KLDivLoss(reduction='sum')
-        # self.loss=torch.nn.CrossEntropyLoss()
+        self.fc3 = torch.nn.Linear(self.embedding_dim * self.num_of_inputs_for_model, self.num_outputs)
+        self.bn1_h3 = torch.nn.BatchNorm1d(self.num_outputs)
+
+        # self.loss = torch.nn.KLDivLoss(reduction='sum')
+        self.loss = torch.nn.BCELoss()
 
     def init(self):
         xavier_normal_(self.embedding.weight.data)
@@ -44,5 +46,5 @@ class DeepT(torch.nn.Module):
         emb_idx = self.fc3(emb_idx)
         # emb_idx = self.bn1_h3(emb_idx)
 
-        emb_idx=emb_idx.squeeze()
+        emb_idx = emb_idx.squeeze()
         return torch.softmax(emb_idx, dim=1)
