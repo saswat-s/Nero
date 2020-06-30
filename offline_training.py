@@ -3,7 +3,7 @@ import random
 import torch
 from torch.utils.data import DataLoader
 from ontolearn import KnowledgeBase, CustomRefinementOperator
-from ontolearn.util import create_experiment_folder, create_logger
+from ontolearn.util import create_experiment_folder, create_logger, get_full_iri
 from ontolearn.metrics import F1
 from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
@@ -13,33 +13,34 @@ import numpy as np
 import umap
 from helper_classes import TorchData, DataGeneratingProcess
 from helper_func import score_with_labels
+import ontolearn
+
 RANDOM_SEED = 0
 random.seed(RANDOM_SEED)
 torch.manual_seed(RANDOM_SEED)
 
 storage_path, _ = create_experiment_folder(folder_name='Log')
-
 logger = create_logger(name='DeepT', p=storage_path)
 
 # path = 'data/biopax.owl'
 path = 'data/family-benchmark_rich_background.owl'
-kb = KnowledgeBase(path=path)
+
+max_size_of_concept=300
+kb = KnowledgeBase(path=path, min_size_of_concept=1, max_size_of_concept=max_size_of_concept)
 logger.info('Deep tunnelling for Refinement Operator'.format())
 logger.info('Knowledgebase:{0}'.format(kb.name))
 
 params = {
-    'num_of_concepts_refined': 10,
-    'max_size_of_concept': 60,
-    'min_size_of_concept': 20,
-
-    'num_instances': len(kb.thing.instances) + 1,  # +1 for a dummy varriable
-    'num_dim': 50,
-    'num_of_epochs': 2,
+    'num_of_concepts_refined': 1,
+    'max_size_of_concept': max_size_of_concept,
+    'min_size_of_concept': 1,
+    'num_instances': len(kb.thing.instances) + 2,  # 2 dummy variable for a dummy varriable
+    'num_dim': 100,
+    'num_of_epochs': 1,
     'batch_size': 256,
-    'num_of_inputs_for_model': 40,  # must be dividable by two ,
-    'num_of_times_sample_per_concept': 5,
-    'num_of_samples_for_prediction_averaging': 2,
-    'flag_for_plotting': False
+    'num_of_inputs_for_model': 50,  # must be dividable by two ,
+    'num_of_times_sample_per_concept': 1,
+    'flag_for_plotting': True
 }
 
 ####################################### data generation process ########################################################
@@ -50,39 +51,49 @@ data_generator = DataGeneratingProcess(knowledge_base=kb,
                                        storage_path=storage_path)
 
 concepts = data_generator.generate_concepts(num_of_concepts_refined=params['num_of_concepts_refined'],
-                                            min_size_of_concept=params['min_size_of_concept'],
-                                            max_size_of_concept = params['max_size_of_concept'])
+                                            min_size_of_concept=params['min_size_of_concept'])
+
 
 concepts_train_split, concepts_test_split = train_test_split(concepts,
-                                                 test_size=0.3, random_state=RANDOM_SEED)
+                                                             test_size=0.1, random_state=RANDOM_SEED)
+
+concepts_seen_during_training = dict()
+for c in concepts_train_split:
+    concepts_seen_during_training[c.str] = list({get_full_iri(i) for i in c.instances})
+with open(storage_path + '/seen_concepts.json', 'w') as jsonfile:
+    json.dump(concepts_seen_during_training, jsonfile, indent=2)
+del concepts_seen_during_training
+
+kb.save(storage_path + '/enriched.owl', rdf_format="rdfxml")
 
 
-concepts.sort(key=lambda x:len(x),reverse=False)
-X_test_pos,X_test_neg=data_generator.save(concepts_test_split, path=storage_path + '/Testing.json',
-                                  sample_size_for_pos_neg=params['num_of_inputs_for_model'])
 
+concepts_test_split.sort(key=lambda x: len(x), reverse=True)
+concepts_test_split=concepts_test_split[:25]
+
+Target, X_test_pos, X_test_neg = data_generator.save(concepts_test_split, path=storage_path + '/Testing.json',
+                                                     sample_size_for_pos_neg=params['num_of_inputs_for_model'])
 # Important decision: Apply Jaccard, PPMI, etc
-if len(concepts_train_split) > 10_000:
-    labels = np.array(random.sample(concepts_train_split, 10_000))
-else:
-    labels = np.array(concepts_train_split)
-# TODO SAVE  LABELS
+labels = np.array(concepts_train_split)
 
+concept_labels = dict()
+for index, concept in enumerate(labels):
+    #concept_labels[concept.str] = {'index':index, 'instances':{get_full_iri(i.instances) for i in concept}}
+    concept_labels[concept.str] = index
 
+with open(storage_path + '/labels.json', 'w') as jsonfile:
+    json.dump(concept_labels, jsonfile, indent=4)
+del concept_labels
 
 # Generate Training Data
-X, y = data_generator.convert_data(concepts_train_split, labels, params)
+targets, X, y = data_generator.convert_data(concepts_train_split, labels, params)
 X = torch.tensor(X)
 y = torch.tensor(y)  # F-scores
 # y = torch.softmax(torch.tensor(y), dim=1)  # F-scores are turned into f-score distributions.
 
 params['num_of_outputs'] = len(labels)
-
 loader = DataLoader(TorchData(X, y), batch_size=params['batch_size'], shuffle=True, num_workers=1)
-
 logger.info('Number of unique concepts in training split:{0}\tNumber of data-points {1}'.format(len(labels), len(X)))
-
-
 model = DeepT(params)
 
 with open(storage_path + '/parameters.json', 'w') as file_descriptor:
@@ -95,11 +106,8 @@ with open(storage_path + '/parameters.json', 'w') as file_descriptor:
 
 model.init()
 opt = torch.optim.Adam(model.parameters())
-
 logger.info(model)
-####################################################################################################################
 logger.info('Training starts: Number of data points:{0}'.format(len(X)))
-
 loss_per_epoch = []
 model.train()
 for it in range(1, params['num_of_epochs'] + 1):
@@ -133,64 +141,66 @@ if params['flag_for_plotting']:
     embeddings = model.state_dict()['embedding.weight']
     low_embd = reducer.fit_transform(embeddings)
     fig, ax = plt.subplots()
-    ax.scatter(low_embd[:, 0], low_embd[:, 1])
+    # ax.scatter(low_embd[:, 0], low_embd[:, 1])
+
+    # print(kb.concepts.keys())
+    for k, v in kb.concepts.items():
+
+        if 'Female  ⊓ ' in v.str:
+            selected_indx = [data_generator.indx[get_full_iri(i)] for i in v.instances]
+            ax.scatter(low_embd[selected_indx, 0], low_embd[selected_indx, 1], c='r')
+        elif 'Male  ⊓ ' in v.str:
+            selected_indx = [data_generator.indx[get_full_iri(i)] for i in v.instances]
+            ax.scatter(low_embd[selected_indx, 0], low_embd[selected_indx, 1], c='b')
+        else:
+            pass
+            # selected_indx = [data_generator.indx[get_full_iri(i)] for i in v.instances]
+            # ax.scatter(low_embd[selected_indx, 0], low_embd[selected_indx, 1],c='c')
+
+    plt.title('Female vs Male')
     plt.savefig(storage_path + '/ScatterPlotOfUMAP_EMB')
-    # for i, txt in enumerate(data.individuals):
-    #    ax.annotate(txt, (low_embd[i, 0], low_embd[i, 1]))
     plt.show()
 
-
-assert len(X_test_pos)==len(X_test_neg)
+assert len(X_test_pos) == len(X_test_neg) == len(Target)
 logger.info('Testing starts on:{0}'.format(len(X_test_pos)))
 model.eval()  # Turns evaluation mode on, i.e., dropouts are turned off.
-
-
 
 true_f1_scores = []
 predicted_f_dist = []
 f1_score_to_report = []
 with torch.no_grad():  # Important:    for j in range(0, len(X_train), params['batch_size']):
 
-    for ith in range(len(X_test_pos)):
-        k_inputs = []
-        k_f_measures_per_label = []
-        k_pred = []
-        for k in range(params['num_of_samples_for_prediction_averaging']):
-            try:
-                x_pos, x_neg = X_test_pos[ith],X_test_neg[ith]
+    for target, x_pos, x_neg in zip(Target, X_test_pos, X_test_neg):
+        set_x_pos, set_x_neg = set(x_pos), set(x_neg)
 
-                k_f_measures_per_label.append(score_with_labels(pos=x_pos, neg=x_neg, labels=labels))
-                k_inputs.append([data_generator.indx[i] for i in x_pos + x_neg])
-                # input = torch.tensor(input).reshape(1, len(input))
-            except ValueError:
-                continue
-        k_inputs = torch.tensor(np.array(k_inputs), dtype=torch.int64)
+        idx_pos = [data_generator.indx[get_full_iri(i)] if i != data_generator.dummy_pos else data_generator.indx[i] for i
+                   in
+                   list(x_pos) + [data_generator.dummy_pos for _ in
+                                  range(params['num_of_inputs_for_model'] // 2 - len(x_pos))]]
 
-        if len(k_inputs) == 0:
-            raise ValueError
+        idx_neg = [data_generator.indx[get_full_iri(i)] if i != data_generator.dummy_neg else data_generator.indx[i] for i
+                   in
+                   list(x_neg) + [data_generator.dummy_neg for _ in
+                                  range(params['num_of_inputs_for_model'] // 2 - len(x_neg))]]
 
-        predictions = model.forward(k_inputs)
+        x = torch.tensor(np.array(idx_pos + idx_neg), dtype=torch.int64)
 
-        averaged_predicted_f1_dist = torch.mean(predictions, dim=0)
+        x = x.reshape(1, len(x))
 
-        # We use averaging as we can not make use of all individuals.
-        # Save average predicted F-1 score distribution and average TRUE F1-scores
-        predicted_f_dist.append(averaged_predicted_f1_dist.numpy())
-        true_f1_scores.append(np.array(k_f_measures_per_label).mean(axis=0))
+        predictions = model.forward(x)
 
-        # Save average predicted F-1 score distribution.
-        values, indexes = torch.topk(averaged_predicted_f1_dist, 2)
+        values, indexes = torch.topk(predictions, 2)
 
         best_pred = labels[indexes]
-
-        x_pos, x_neg = set(X_test_pos[ith]), set(X_test_neg[ith])
+        logger.info('Target:{0}'.format(target))
         for ith, pred in enumerate(best_pred):
-            f_1 = data_generator.score_with_instances(pos=x_pos,
-                                                      neg=x_neg,
+            f_1 = data_generator.score_with_instances(pos=set_x_pos,
+                                                      neg=set_x_neg,
                                                       instances=pred.instances)
 
             if ith == 0:
                 f1_score_to_report.append(f_1)
+
 
             logger.info(
                 '{0}.th {1} with num_instance:{2}\tF-1 score:{3}'.format(ith + 1, pred.str, len(pred.instances), f_1))
@@ -200,14 +210,7 @@ logger.info(
     'Mean and STD of F-1 score of 1.th predictions at testing:{0:.3f} +- {1:.3f}'.format(f1_score_to_report.mean(),
                                                                                          f1_score_to_report.std()))
 
-
-
-
-
-
-
 exit(1)
-
 
 true_f1_scores = []
 predicted_f_dist = []

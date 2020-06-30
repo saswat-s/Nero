@@ -168,8 +168,6 @@ def save_as_json(data,path,kb):
 
 
 def score_with_labels(*, pos, neg, labels):
-    assert isinstance(pos, list)
-    assert isinstance(neg, list)
 
     pos = set(pos)
     neg = set(neg)
