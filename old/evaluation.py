@@ -13,7 +13,7 @@ import pandas as pd
 import time
 from scipy.stats import describe
 
-file_path = 'Log/2020-06-30 10:56:46.174980/'
+file_path = 'Log/2020-07-03 16:50:52.573320/'
 with open(file_path + 'Testing.json', 'r') as file_descriptor:
     concepts_test = json.load(file_descriptor)
 with open(file_path + 'seen_concepts.json', 'r') as file_descriptor:

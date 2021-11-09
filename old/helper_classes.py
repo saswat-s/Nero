@@ -59,26 +59,24 @@ class DataGeneratingProcess:
         self.individuals = list(self.kb.thing.instances)
         self.num_individuals = len(self.individuals)
 
+        self.indx = dict()
+
+        """
         self.indx = dict(
             zip([get_full_iri(i) for i in self.kb.thing.instances], list(range(len(self.kb.thing.instances)))))
-
+        """
         self.dummy_pos = 'DUMMY_POS'
         self.dummy_neg = 'DUMMY_NEG'
-
-        self.indx[self.dummy_pos] = len(self.indx)
-        self.indx[self.dummy_neg] = len(self.indx)
-
-        with open(self.storage_path + '/index.json', 'w') as file_descriptor:
-            json.dump(self.indx, file_descriptor, sort_keys=True, indent=3)
 
         ## initialize search tree
         self.root = self.rho.getNode(self.kb.thing, root=True)
 
-    def generate_concepts(self, num_of_concepts_refined, min_size_of_concept):
+    def generate_concepts(self, max_length_of_concept, num_of_concepts_refined, min_size_of_concept):
 
         refined_nodes = set()
 
-        explored_nodes = {self.rho.getNode(i, parent_node=self.root) for i in self.rho.refine(self.root.concept)}
+        explored_nodes = {self.rho.getNode(i, parent_node=self.root) for i in
+                          self.rho.refine(self.root, maxlength=max_length_of_concept)}
         refined_nodes.add(self.root)
 
         while len(refined_nodes) < num_of_concepts_refined:
@@ -93,8 +91,7 @@ class DataGeneratingProcess:
 
             if next_node in refined_nodes:
                 continue
-            refinements = (self.rho.getNode(i, parent_node=next_node) for i in self.rho.refine(next_node.concept)
-                           if i is not None)
+            refinements = (self.rho.getNode(i, parent_node=next_node) for i in self.rho.refine(next_node,maxlength=max_length_of_concept))
 
             for child in refinements:
                 if len(child.concept.instances) >= min_size_of_concept:
@@ -106,7 +103,22 @@ class DataGeneratingProcess:
         concepts = list(i.concept for i in refined_nodes.union(explored_nodes)
                         if len(i.concept.instances) >= min_size_of_concept)
 
-        self.logger.info('Number of concepts generated: {0}'.format(len(concepts)))
+        # VERY INEFFICIENT
+        indvs = set()
+        for i in concepts:
+            indvs.update(i.instances)
+        self.indx = dict(
+            zip([get_full_iri(i) for i in indvs], list(range(len(indvs)))))
+
+        self.indx[self.dummy_pos] = len(self.indx)
+        self.indx[self.dummy_neg] = len(self.indx)
+        del indvs
+
+        with open(self.storage_path + '/index.json', 'w') as file_descriptor:
+            json.dump(self.indx, file_descriptor, sort_keys=True, indent=3)
+
+        self.logger.info('Number of concepts refined: {0}'.format(len(refined_nodes)))
+        self.logger.info('Number of valid concepts generated: {0}'.format(len(concepts)))
         return concepts
 
     def pos_neg_sampling_from_concept(self, c, number):
@@ -174,9 +186,7 @@ class DataGeneratingProcess:
         Target = []
         for c in concepts:
             target = c.str
-
             pos, neg = self.pos_neg_sampling_from_concept(c, number=sample_size_for_pos_neg)
-
             pos = list(pos)
             cleaned_neg = list(i for i in neg if i != self.dummy_neg)
             if len(cleaned_neg) == 0:
@@ -190,9 +200,9 @@ class DataGeneratingProcess:
                                                                        'Negatives': [get_full_iri(i) for i in
                                                                                      cleaned_neg]}
 
+        self.logger.info('Number of concepts at testing {0}'.format(len(test_data)))
         with open(path, 'w') as jsonfile:
             json.dump(test_data, jsonfile, indent=4)
-
         return Target, X_pos, X_neg
 
 
