@@ -1,28 +1,3 @@
-"""
-====================================================================
-Deep Tunnelling
-====================================================================
-Drill with training.
-Authors: Caglar Demir
-
-(1) Parse input knowledge base
-(2) Generate 100_000 Class Expressions that are "informative"
-    # (3) Generate learning problems, where a learning problem E is a set of examples/instance
-    # considered as positive examples. E has variable Size
-    # (4) Extend (3) by adding randomly sampled examples
-    # (5) Let D denotes the set generated in (3) and (4)
-    # (6) For each learning problem X_i, compute Y_i that is a vector of F1-scores
-    # (7) Summary: D_i = { ({e_x, e_y, ...e_z }_i ,Y_i) }_i=0 ^N has variable size, Y_i has 10^5 size
-    # (8) For each D_i, let x_i denote input set and Y_i label
-    # (9) Let \mathbf{x_i} \in R^{3,D} represent the mean, median, and sum of X_i; permutation invariance baby :)
-    # (10) Train sigmoid(net) to minimize binary cross entropy; multi-label classification problem
-
-    # We can use (10) for
-    #                 class expression learning
-    #                 ?Explainable Clustering ?
-    #                 ?link prediction? (h,r,x) look the range of  top10K(Y_i)
-https://github.com/RDFLib/sparqlwrapper/blob/master/scripts/example-dbpedia.py
-"""
 from ontolearn import KnowledgeBase
 from typing import List, Tuple, Set
 from owlapy.model import OWLEquivalentClassesAxiom, OWLClass, IRI, OWLObjectIntersectionOf, OWLObjectUnionOf, \
@@ -43,9 +18,7 @@ from static_funcs import *
 from util_classes import *
 import json
 import pandas as pd
-
-random.seed(0)
-
+import matplotlib.pyplot as plt
 
 class Trainer:
     def __init__(self, knowledge_base: KnowledgeBase, learning_problem_generator: LearningProblemGenerator, args):
@@ -53,10 +26,12 @@ class Trainer:
         self.learning_problem_generator = learning_problem_generator
         # List of URIs representing instances / individuals
         self.instances = None
+        # Input arguments
         self.args = args
         # Create an experiment folder
         self.storage_path, _ = create_experiment_folder(folder_name='Experiments')
         self.logger = create_logger(name='Trainer', p=self.storage_path)
+        # cuda device
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.logger.info('Device:{0}'.format(self.device))
         if torch.cuda.is_available():
@@ -126,7 +101,18 @@ class Trainer:
 
         return data_loader
 
-    def training_loop(self, model, loss_func, optimizer, data_loader, num_epochs):
+    def training_loop(self, target_individuals):
+        # (1) Generate Training Data Points
+        data_loader = self.generate_training_data(target_individuals)
+
+        # (2) Initialize DT
+        model = DT(param={'num_embedding_dim': self.args.num_embedding_dim,
+                          'num_instances': len(self.instances),
+                          'num_outputs': len(target_individuals)})
+
+        loss_func = torch.nn.CrossEntropyLoss()
+        optimizer = torch.optim.Adam(model.parameters(), lr=self.args.learning_rate)
+
         self.logger.info('Training Loop starts')
         # (1) Set model in training mode.
         model.train()
@@ -135,9 +121,9 @@ class Trainer:
         # (3) Store average loss per epoch
         losses = []
         # (4) Start training loop
-        printout_constant = (num_epochs // 20) + 1
+        printout_constant = (self.args.num_epochs // 20) + 1
         start_time = time.time()
-        for it in range(1, num_epochs + 1):
+        for it in range(1, self.args.num_epochs + 1):
             epoch_loss = 0
             # (5) Mini-batch.
             for x, y in data_loader:
@@ -178,59 +164,21 @@ class Trainer:
         :return:
         """
         self.logger.info('Start')
+        # (1) .
         target_individuals = self.generate_class_expressions()
-        data_loader = self.generate_training_data(target_individuals)
+        # (4) L
+        model = self.training_loop(target_individuals)
 
-        # Model definition
-        model = DT(param={'num_embedding_dim': self.args.num_embedding_dim,
-                          'num_instances': len(self.instances),
-                          'num_outputs': len(target_individuals)})
-
-        loss_func = torch.nn.CrossEntropyLoss()
-        optimizer = torch.optim.Adam(model.parameters(), lr=self.args.learning_rate)
-        model = self.training_loop(model, loss_func, optimizer, data_loader, self.args.num_epochs)
-
-        df = pd.DataFrame(model.embeddings.weight.data.detach().numpy(), index=self.instances)
+        embeddings=model.embeddings.weight.data.detach().numpy()
+        df = pd.DataFrame(embeddings, index=self.instances)
 
         df.to_csv(self.storage_path + '/instance_embeddings.csv')
 
-def main(args):
-    """
-
-    :param args:
-    :return:
-    """
-    # (1) Parse input KB
-    kb = KnowledgeBase(path=args.path_knowledge_base,
-                       reasoner_factory=ClosedWorld_ReasonerFactory)
-    # (3) Generate Class Expressions semi-randomly
-    lpg = LearningProblemGenerator(knowledge_base=kb,
-                                   min_length=args.min_length,
-                                   max_length=args.max_length,
-                                   min_num_instances=args.min_num_instances_ratio_per_concept * kb.individuals_count(),
-                                   max_num_instances=args.max_num_instances_ratio_per_concept * kb.individuals_count())
-
-    trainer = Trainer(knowledge_base=kb, learning_problem_generator=lpg, args=args)
-    trainer.start()
-
-
-if __name__ == '__main__':
-    parser = ArgumentParser()
-    # General
-    parser.add_argument("--path_knowledge_base", type=str,
-                        default='KGs/Family/family-benchmark_rich_background.owl'
-                        )
-    # Concept Generation Related
-    parser.add_argument("--min_length", type=int, default=0, help='Min length of concepts to be used')
-    parser.add_argument("--max_length", type=int, default=5, help='Max length of concepts to be used')
-    parser.add_argument("--min_num_instances_ratio_per_concept", type=float, default=.01)
-    parser.add_argument("--max_num_instances_ratio_per_concept", type=float, default=.90)
-
-    # Neural related
-    parser.add_argument("--input_set_size", type=int, default=10, help='Input set size for expression learning.')
-    parser.add_argument("--num_of_data_points", type=int, default=1000, help='Total number of randomly sampled training data points')
-    parser.add_argument("--num_embedding_dim", type=int, default=25, help='Number of embedding dimensions.')
-    parser.add_argument("--learning_rate", type=int, default=.01, help='Learning Rate')
-    parser.add_argument("--num_epochs", type=int, default=50, help='Number of iterations over the entire dataset.')
-    parser.add_argument("--batch_size", type=int, default=1024)
-    main(parser.parse_args())
+        if self.args.plot_embeddings>0:
+            #import umap
+            #reducer = umap.UMAP()
+            #low_emb = reducer.fit_transform(embeddings)
+            from sklearn.decomposition import PCA
+            low_emb = PCA(n_components=2).fit_transform(embeddings)
+            plt.scatter(low_emb[:, 0],low_emb[:, 1])
+            plt.show()
