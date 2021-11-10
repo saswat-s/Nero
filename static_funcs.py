@@ -5,13 +5,32 @@ import logging
 import os
 import time
 import torch
+from collections import deque
+
 
 def target_scores(target_instances, positive_examples: Set):
-    # Compute True positives
+    # Confusion matrix
+    #                        Prediction
+    #                   Positive, Negative
+    #       Positive    TP      , FN
+    # True
+    #       Negative
+    # Predict positive: Result Positive
+    target_instances = set(target_instances)
+    positive_examples = set(positive_examples)
     tp = len(positive_examples.intersection(target_instances))
+    """
+    tp = len(positive_examples.intersection(target_instances))
+    # Predict Negative : Result Positive
+    fn = len(target_instances.difference(positive_examples))
+    # Predict Positive : Result Negative
+    fp = len(positive_examples.difference(target_instances))
+
+    # tn
     # "relative true positives" that is my term :D we want f to be between 0 and 1
-    relative_tp = tp / len(target_instances)
-    return relative_tp
+    return tp / (fn + fp)
+    """
+    return tp/len(target_instances)
 
 
 def retrieve_concept_chain(rl_state: RL_State) -> List[RL_State]:
@@ -22,6 +41,7 @@ def retrieve_concept_chain(rl_state: RL_State) -> List[RL_State]:
             hierarchy.append(hierarchy[-1].parent_node)
         hierarchy.appendleft(rl_state)
     return list(hierarchy)
+
 
 def create_experiment_folder(folder_name='Experiments'):
     directory = os.getcwd() + '/' + folder_name + '/'
