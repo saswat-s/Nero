@@ -1,14 +1,32 @@
-# Deep Tunnelling For Expression Learning 
-
-In this work, we propose a novel neurosymbolic that leverage the differentiable computation framework to
-tackle the class expression learning problem on structured data.
-
-
-For a given learning problem, i.e., a set of positive examples $E^+$, 
-1. Obtain embeddings in E^+ .
-2. Derive two permutation invariant representations from (1).
-3. From an input via concatenate these two representations.
-4. Predict coverage scores for pre-fixed N number of expressions.
-5. Obtain a path from most general expression to the least general expressions via (4).
+# Neural Class Expression Learner  
+In this work, we propose a neural model that accurately tackles the class expression learning problem.
+Given a learning problem (a set of positive and a set negative examples), our approach leverages the Set-Transformer algorithm to obtain
+permutation invariant continues representations for input examples. Via these permutation invariant representations,
+our approach learn a sequence of logical formulae (ALC class expressions) that represent hierarchical explanations. 
+Hence, predictions of our model are inherently explainable for the inputs.
 
 
+# Installation
+Create a anaconda virtual environment and install dependencies.
+```
+git clone https://github.com/dice-group/DeepTunnellingForRefinementOperators
+# Create anaconda virtual enviroment
+conda env create -f environment.yml
+# Active virtual enviroment 
+conda activate deeptunnel
+```
+# Preprocessing (Later)
+Unzip knowledge graphs, embeddings, learning problems and pretrained models.
+```
+unzip KGs.zip
+unzip pre_trained_agents.zip
+unzip LPs.zip
+```
+# Prepare DL-Learner (Later)
+Download DL-Learner.
+```
+# Download DL-Learner
+wget --no-check-certificate --content-disposition https://github.com/SmartDataAnalytics/DL-Learner/releases/download/1.4.0/dllearner-1.4.0.zip
+unzip dllearner-1.4.0.zip
+# Test the DL-learner framework
+dllearner-1.4.0/bin/cli dllearner-1.4.0/examples/father.conf

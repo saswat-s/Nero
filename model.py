@@ -1,5 +1,74 @@
 import torch
 from torch import nn
+from typing import Dict, List
+from ontolearn.search import RL_State
+from owlapy.render import DLSyntaxObjectRenderer
+import time
+
+class NCEL:
+    def __init__(self, param: Dict, quality_func, target_class_expressions: List[RL_State], instance_idx_mapping: Dict):
+        self.model = DT(param)
+        self.quality_func = quality_func
+        self.target_class_expressions = target_class_expressions
+        self.instance_idx_mapping = instance_idx_mapping
+        self.renderer = DLSyntaxObjectRenderer()
+
+    def forward(self, xpos, xneg):
+        return self.model(xpos, xneg)
+
+    def fit(self, pos, neg):
+        start_time = time.time()
+
+        xpos = torch.LongTensor([[self.instance_idx_mapping[i] for i in pos]])
+        xneg = torch.LongTensor([[self.instance_idx_mapping[i] for i in neg]])
+        pred = self.forward(xpos, xneg)
+
+        sort_values, sort_idxs = torch.sort(pred, dim=1, descending=True)
+        sort_idxs = sort_idxs.cpu().numpy()[0]
+
+        results = []
+        # Explore only 10 class expressions
+        for i in sort_idxs[:250]:
+            s = self.quality_func(instances={i.get_iri().as_str() for i in self.target_class_expressions[i].instances},
+                                  positive_examples=set(pos), negative_examples=set(neg))
+            results.append((s, self.target_class_expressions[i]))
+
+        results: List[RL_State] = sorted(results, key=lambda x: x[0], reverse=False)
+
+        f1, top_pred = results.pop()
+
+        report = {'Prediction': self.renderer.render(top_pred.concept),
+                  'Instances': {i.get_iri().as_str() for i in top_pred.instances},
+                  'NumClassTested': 250,
+                  'Runtime':time.time() - start_time,
+                  }
+
+        return report
+
+    def __str__(self):
+        return f'NCEL with {self.model}'
+
+    def train(self):
+        self.model.train()
+
+    def eval(self):
+        self.model.eval()
+
+    def to(self, device):
+        self.model.to(device)
+
+    def state_dict(self):
+        return self.model.state_dict()
+
+    def parameters(self):
+        return self.model.parameters()
+
+    def embeddings_to_numpy(self):
+        return self.model.embeddings.weight.data.detach().numpy()
+
+    def get_target_class_expressions(self):
+        return (self.renderer.render(cl.concept) for cl in self.target_class_expressions)
+
 
 class DT(torch.nn.Module):
     def __init__(self, param):
@@ -13,18 +82,22 @@ class DT(torch.nn.Module):
         self.num_outputs = self.param['num_outputs']
 
         self.embeddings = torch.nn.Embedding(self.num_instances, self.num_embedding_dim)
-
-        self.fc0 = nn.Sequential(nn.BatchNorm1d(self.num_embedding_dim + self.num_embedding_dim),
-                                 nn.Linear(in_features=self.num_embedding_dim + self.num_embedding_dim,
+        # 3 permutation invariant representations for positive and negative examples.
+        input_size = int(self.num_embedding_dim * 6)
+        self.fc0 = nn.Sequential(nn.BatchNorm1d(input_size),
+                                 nn.Linear(in_features=input_size,
                                            out_features=self.num_outputs))
 
-    def forward(self, x):
+    def forward(self, xpos, xneg):
         # (1) Get embeddings
-        x = self.embeddings(x)
-        # (2) Permutation Invariant Representations
-        x = torch.cat((torch.mean(x, 1), torch.sum(x, 1)), 1)
-        return torch.sigmoid(self.fc0(x))
+        xpos = self.embeddings(xpos)
+        xneg = self.embeddings(xneg)
 
+        # (2) Permutation Invariant Representations
+        x = torch.cat((torch.mean(xpos, 1), torch.sum(xpos, 1), torch.std(xpos, 1),
+                       torch.mean(xneg, 1), torch.sum(xneg, 1), torch.std(xneg, 1)), 1)
+        # (3) (BN, LN, ReLU )(x)
+        return torch.sigmoid(self.fc0(x))
 
 
 class MAB(nn.Module):
@@ -91,7 +164,7 @@ class PMA(nn.Module):
 
 
 class SetTransformer(nn.Module):
-    def __init__(self, dim_input, num_outputs, dim_output,num_inds=32, dim_hidden=128, num_heads=4, ln=False):
+    def __init__(self, dim_input, num_outputs, dim_output, num_inds=32, dim_hidden=128, num_heads=4, ln=False):
         super(SetTransformer, self).__init__()
         self.enc = nn.Sequential(
             ISAB(dim_input, dim_hidden, num_heads, num_inds, ln=ln),

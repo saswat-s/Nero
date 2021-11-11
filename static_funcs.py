@@ -8,29 +8,28 @@ import torch
 from collections import deque
 
 
-def target_scores(target_instances, positive_examples: Set):
-    # Confusion matrix
-    #                        Prediction
-    #                   Positive, Negative
-    #       Positive    TP      , FN
-    # True
-    #       Negative
-    # Predict positive: Result Positive
-    target_instances = set(target_instances)
-    positive_examples = set(positive_examples)
-    tp = len(positive_examples.intersection(target_instances))
-    """
-    tp = len(positive_examples.intersection(target_instances))
-    # Predict Negative : Result Positive
-    fn = len(target_instances.difference(positive_examples))
-    # Predict Positive : Result Negative
-    fp = len(positive_examples.difference(target_instances))
+def f_measure(*, instances: Set, positive_examples: Set, negative_examples: Set):
+    tp = len(positive_examples.intersection(instances))
+    # tn = len(learning_problem.kb_neg.difference(instances))
 
-    # tn
-    # "relative true positives" that is my term :D we want f to be between 0 and 1
-    return tp / (fn + fp)
-    """
-    return tp/len(target_instances)
+    fp = len(negative_examples.intersection(instances))
+    fn = len(positive_examples.difference(instances))
+
+    try:
+        recall = tp / (tp + fn)
+    except ZeroDivisionError:
+        return 0.0
+
+    try:
+        precision = tp / (tp + fp)
+    except ZeroDivisionError:
+        return 0.0
+
+    if precision == 0 or recall == 0:
+        return 0.0
+
+    f_1 = 2 * ((precision * recall) / (precision + recall))
+    return round(f_1, 5)
 
 
 def retrieve_concept_chain(rl_state: RL_State) -> List[RL_State]:
