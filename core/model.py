@@ -29,6 +29,7 @@ class NCEL:
         results = []
         # We could apply multi_processing here
         # Explore only top K class expressions that have received highest K scores
+        # IF goal found break it.
         for i in sort_idxs[:topK]:
             s = self.quality_func(instances={i.get_iri().as_str() for i in self.target_class_expressions[i].instances},
                                   positive_examples=set(pos), negative_examples=set(neg))

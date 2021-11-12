@@ -1,8 +1,17 @@
 import torch
 from torch import nn
-class DT(torch.nn.Module):
+import math
+import torch.nn.functional as F
+
+
+class PIL(torch.nn.Module):
+    """
+    Permutation invariant Affine Transformation
+    x=[mean(E^+),std(E^+),sum(E^+),mean(E^-),std(E^-),sum(E^-)]
+    """
+
     def __init__(self, param):
-        super(DT, self).__init__()
+        super(PIL, self).__init__()
         self.name = 'DT'
         self.param = param
 
@@ -26,6 +35,43 @@ class DT(torch.nn.Module):
         # (2) Permutation Invariant Representations
         x = torch.cat((torch.mean(xpos, 1), torch.sum(xpos, 1), torch.std(xpos, 1),
                        torch.mean(xneg, 1), torch.sum(xneg, 1), torch.std(xneg, 1)), 1)
+        # (3) (BN, LN, ReLU )(x)
+        return torch.sigmoid(self.fc0(x))
+
+
+class ST(torch.nn.Module):
+    """
+    Permutation invariant Affine Transformation
+    x=[mean(E^+),std(E^+),sum(E^+),mean(E^-),std(E^-),sum(E^-)]
+    """
+
+    def __init__(self, param):
+        super(ST, self).__init__()
+        self.name = 'ST'
+        self.param = param
+        self.num_instances = self.param['num_instances']
+        self.num_embedding_dim = self.param['num_embedding_dim']
+
+        self.num_outputs = self.param['num_outputs']
+
+        self.embeddings = torch.nn.Embedding(self.num_instances, self.num_embedding_dim)
+        # Like a set wise flattening
+        num_outputs = 1
+        self.st = SetTransformer(self.num_embedding_dim, num_outputs, self.num_embedding_dim, num_inds=32,
+                                 dim_hidden=128, num_heads=4, ln=False)
+
+        self.fc0 = nn.Sequential(nn.BatchNorm1d(self.num_embedding_dim + self.num_embedding_dim),
+                                 nn.Linear(in_features=self.num_embedding_dim + self.num_embedding_dim,
+                                           out_features=self.num_outputs))
+
+    def forward(self, xpos, xneg):
+        assert xpos.shape == xneg.shape
+        # (1) Get embeddings
+        xpos = self.embeddings(xpos)
+        xneg = self.embeddings(xneg)
+        xpos = torch.squeeze(self.st(xpos), dim=1)
+        xneg = torch.squeeze(self.st(xneg), dim=1)
+        x = torch.cat((xpos, xneg), 1)
         # (3) (BN, LN, ReLU )(x)
         return torch.sigmoid(self.fc0(x))
 

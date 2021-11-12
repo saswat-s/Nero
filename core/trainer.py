@@ -90,23 +90,26 @@ class Trainer:
 
     def neural_architecture_selection(self):
         param = {'num_embedding_dim': self.args['num_embedding_dim'],
-                         'num_instances': self.knowledge_base.individuals_count(),
-                         'num_outputs': len(self.learning_problems.target_idx_individuals)}
+                 'num_instances': self.knowledge_base.individuals_count(),
+                 'num_outputs': len(self.learning_problems.target_idx_individuals)}
 
-        if self.args['neural_architecture'] == 'PIL':
-            model = DT(param)
+        arc = self.args['neural_architecture']
+        if arc == 'PIL':
+            model = PIL(param)
+        elif arc == 'ST':
+            model = ST(param)
         else:
             raise NotImplementedError('There is no other model')
 
         return NCEL(model=model,
-                     quality_func=f_measure,
-                     target_class_expressions=self.learning_problems.target_class_expressions,
-                     instance_idx_mapping=self.learning_problems.instance_idx_mapping)
+                    quality_func=f_measure,
+                    target_class_expressions=self.learning_problems.target_class_expressions,
+                    instance_idx_mapping=self.learning_problems.instance_idx_mapping)
 
     def training_loop(self):
 
         # (1) Initialize the model.
-        model=self.neural_architecture_selection()
+        model = self.neural_architecture_selection()
         # (2) Describe the training setting.
         self.describe_configuration(model)
         # (3) Initialize the training
