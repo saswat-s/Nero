@@ -15,6 +15,14 @@ conda env create -f environment.yml
 # Active virtual enviroment 
 conda activate deeptunnel
 ```
+# Integrate DL-Learner
+```
+# Download DL-Learner
+wget --no-check-certificate --content-disposition https://github.com/SmartDataAnalytics/DL-Learner/releases/download/1.4.0/dllearner-1.4.0.zip
+unzip dllearner-1.4.0.zip
+# Test the DL-learner framework
+dllearner-1.4.0/bin/cli dllearner-1.4.0/examples/father.conf
+```
 # Preprocessing (Later)
 Unzip knowledge graphs, embeddings, learning problems and pretrained models.
 ```
@@ -22,11 +30,3 @@ unzip KGs.zip
 unzip pre_trained_agents.zip
 unzip LPs.zip
 ```
-# Prepare DL-Learner (Later)
-Download DL-Learner.
-```
-# Download DL-Learner
-wget --no-check-certificate --content-disposition https://github.com/SmartDataAnalytics/DL-Learner/releases/download/1.4.0/dllearner-1.4.0.zip
-unzip dllearner-1.4.0.zip
-# Test the DL-learner framework
-dllearner-1.4.0/bin/cli dllearner-1.4.0/examples/father.conf

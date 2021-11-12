@@ -3,7 +3,7 @@ from owlapy.model import OWLOntology, OWLReasoner
 from owlapy.owlready2 import OWLOntology_Owlready2
 from owlapy.owlready2.temp_classes import OWLReasoner_Owlready2_TempClasses
 from owlapy.fast_instance_checker import OWLReasoner_FastInstanceChecker
-from static_funcs import f_measure
+from .static_funcs import f_measure
 from multiprocessing import Pool
 from typing import List
 import numpy as np

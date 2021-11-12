@@ -8,13 +8,14 @@ from owlapy.render import DLSyntaxObjectRenderer
 
 import random
 from collections import deque
-from model import NCEL
+from .model import NCEL
 
 import torch
 from torch import nn
 import numpy as np
-from static_funcs import *
-from util_classes import *
+from .static_funcs import *
+from .util_classes import *
+from .neural_arch import *
 import json
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -22,18 +23,19 @@ from sklearn.decomposition import PCA
 
 
 class Trainer:
-    def __init__(self, knowledge_base: KnowledgeBase, learning_problems, args):
+    """ Trainer of Neural Class Expression Learner"""
+
+    def __init__(self, knowledge_base: KnowledgeBase, learning_problems, args, logger):
         self.knowledge_base = knowledge_base
         self.learning_problems = learning_problems
         # List of URIs representing instances / individuals
         self.instances = None
         # Input arguments
         self.args = args
-        # Create an experiment folder
-        self.storage_path, _ = create_experiment_folder(folder_name='Experiments')
-        self.logger = create_logger(name='Trainer', p=self.storage_path)
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.renderer = DLSyntaxObjectRenderer()
+        self.logger = logger
+        self.storage_path = self.args['storage_path']
 
         # Describe and store the setting of the trainer
         self.__describe_and_store_setting()
@@ -54,9 +56,10 @@ class Trainer:
         self.save_as_json(self.args, name='settings')
 
         self.logger.info('Describe the experiment')
-        self.logger.info(f'Number of named classes: {len([i for i in self.knowledge_base.ontology().classes_in_signature()])}\t'
-                         f'Number of individuals: {self.knowledge_base.individuals_count()}'
-                         )
+        self.logger.info(
+            f'Number of named classes: {len([i for i in self.knowledge_base.ontology().classes_in_signature()])}\t'
+            f'Number of individuals: {self.knowledge_base.individuals_count()}'
+        )
 
     def save_as_json(self, obj, name=None):
         with open(self.storage_path + f'/{name}.json', 'w') as file_descriptor:
@@ -78,33 +81,42 @@ class Trainer:
         self.logger.info("Number of relations:{0}".format(len(self.relation_idxs)))
         self.logger.info("HyperParameter Settings:{0}".format(self.kwargs))
         """
+        self.logger.info(f'Training data size:{len(self.learning_problems)}\t'
+                         f'Number of Labels:{len(self.learning_problems.target_class_expressions)}')
+
         num_param = sum([p.numel() for p in model.parameters()])
         self.logger.info("Number of free parameters: {0}".format(num_param))
         self.logger.info(model)
 
-    def training_loop(self):
+    def neural_architecture_selection(self):
+        param = {'num_embedding_dim': self.args['num_embedding_dim'],
+                         'num_instances': self.knowledge_base.individuals_count(),
+                         'num_outputs': len(self.learning_problems.target_idx_individuals)}
 
-        self.logger.info('Training Loop')
+        if self.args['neural_architecture'] == 'PIL':
+            model = DT(param)
+        else:
+            raise NotImplementedError('There is no other model')
 
-        self.logger.info(f'Training data size:{len(self.learning_problems)}\t'
-                         f'Number of Labels:{len(self.learning_problems.target_class_expressions)}')
-        self.logger.info('Data being labelled')
-        # (1) Initialize the mini-batch loader
-        data_loader = torch.utils.data.DataLoader(Dataset(self.learning_problems),
-                                                  batch_size=self.args['batch_size'],
-                                                  num_workers=4, shuffle=True)
-        from static_funcs import f_measure
-
-        # (2) Initialize neural class expression learner
-        model = NCEL(param={'num_embedding_dim': self.args['num_embedding_dim'],
-                            'num_instances': self.knowledge_base.individuals_count(),
-                            'num_outputs': len(self.learning_problems.target_idx_individuals)},
+        return NCEL(model=model,
                      quality_func=f_measure,
                      target_class_expressions=self.learning_problems.target_class_expressions,
                      instance_idx_mapping=self.learning_problems.instance_idx_mapping)
+
+    def training_loop(self):
+
+        # (1) Initialize the model.
+        model=self.neural_architecture_selection()
+        # (2) Describe the training setting.
         self.describe_configuration(model)
+        # (3) Initialize the training
         loss_func = torch.nn.CrossEntropyLoss()
         optimizer = torch.optim.Adam(model.parameters(), lr=self.args['learning_rate'])
+        self.logger.info('Data being labelled')
+        # (4) Initialize the mini-batch loader
+        data_loader = torch.utils.data.DataLoader(Dataset(self.learning_problems),
+                                                  batch_size=self.args['batch_size'],
+                                                  num_workers=self.args['num_workers'], shuffle=True)
 
         self.logger.info('Training starts')
         # (1) Set model in training mode.
@@ -152,12 +164,8 @@ class Trainer:
         self.logger.info('Training Loop ends')
         return model
 
-    def start(self):
-        """
-        Training starts
-        :return:
-        """
-        self.logger.info('Start')
+    def start(self) -> NCEL:
+        self.logger.info('Start the training phase')
         model = self.training_loop()
 
         embeddings = model.embeddings_to_numpy()
