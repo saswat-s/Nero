@@ -31,7 +31,7 @@ from torch import nn
 import random
 
 random.seed(0)
-
+torch.manual_seed(0)
 
 def main(args):
     """
@@ -46,33 +46,32 @@ if __name__ == '__main__':
     parser = ArgumentParser()
     # General
     parser.add_argument("--path_knowledge_base", type=str,
-                        default='/home/demir/Desktop/Softwares/DeepTunnellingForRefinementOperators/KGs/Family/family-benchmark_rich_background.owl',
+                        default='/home/demir/Desktop/Softwares/Ontolearn/KGs/Carcinogenesis/carcinogenesis.owl',
                         help='The absolute path of a knowledge base required.')
     parser.add_argument("--dl_learner_binary_path", type=str, default='dllearner-1.4.0/')
     parser.add_argument('--num_workers', type=int, default=4, help='Number of cpus used during batching')
 
     # Class Expression Learning
-    parser.add_argument("--num_individual_per_example", type=int, default=20,
+    parser.add_argument("--num_individual_per_example", type=int, default=30,
                         help='Input set size for expression learning.')
-    parser.add_argument("--num_of_learning_problems_training", type=int, default=20,
+    parser.add_argument("--num_of_learning_problems_training", type=int, default=200,
                         help='Total number of randomly generated learning problems for training.')
-    parser.add_argument("--num_of_learning_problems_testing", type=int, default=10,
+    parser.add_argument("--num_of_learning_problems_testing", type=int, default=5,
                         help='Total number of randomly generated learning problems for testing.')
     # Neural related
-    parser.add_argument("--neural_architecture", type=str, default='ST',
-                        help='[ST,PIL]')
+    parser.add_argument("--neural_architecture", type=str, default='PIL', help='[ST,PIL]')
 
-    parser.add_argument("--number_of_target_expressions", type=int, default=500,
+    parser.add_argument("--number_of_target_expressions", type=int, default=250,
                         help='Randomly select target class expressions as labels.')
 
     # Hyperparameters of Neural Class Expression
     parser.add_argument("--num_embedding_dim", type=int, default=25, help='Number of embedding dimensions.')
     # Training Related
     parser.add_argument("--learning_rate", type=int, default=.001, help='Learning Rate')
-    parser.add_argument("--num_epochs", type=int, default=100, help='Number of iterations over the entire dataset.')
+    parser.add_argument("--num_epochs", type=int, default=0, help='Number of iterations over the entire dataset.')
     parser.add_argument("--batch_size", type=int, default=1024)
     # Inference Related
-    parser.add_argument("--topK", type=int, default=250,
+    parser.add_argument("--topK", type=int, default=50,
                         help='Test the highest topK target expressions')
 
     # Analysis Related

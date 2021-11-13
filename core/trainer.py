@@ -46,7 +46,10 @@ class Trainer:
         if torch.cuda.is_available():
             self.logger.info('Name of selected Device:{0}'.format(torch.cuda.get_device_name(self.device)))
 
-        pd.DataFrame(self.learning_problems.data_points).to_csv(self.storage_path + '/GeneratedDataPoints.csv')
+        self.save_as_json({i: {'Pos': e_pos, 'Neg': e_neg} for i, (e_pos, e_neg) in
+                           enumerate(zip(self.learning_problems.e_pos, self.learning_problems.e_neg))},
+                          name='training_learning_problems')
+
         self.save_as_json(self.learning_problems.instance_idx_mapping, name='instance_idx_mapping')
         self.save_as_json({i: {'DL-Syntax': self.renderer.render(cl.concept),
                                'ExpressionChain': [self.renderer.render(_.concept) for _ in retrieve_concept_chain(cl)]}
@@ -102,6 +105,7 @@ class Trainer:
             raise NotImplementedError('There is no other model')
 
         return NCEL(model=model,
+                    kb=self.knowledge_base,
                     quality_func=f_measure,
                     target_class_expressions=self.learning_problems.target_class_expressions,
                     instance_idx_mapping=self.learning_problems.instance_idx_mapping)

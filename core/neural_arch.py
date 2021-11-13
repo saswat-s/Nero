@@ -57,20 +57,24 @@ class ST(torch.nn.Module):
         self.embeddings = torch.nn.Embedding(self.num_instances, self.num_embedding_dim)
         # Like a set wise flattening
         num_outputs = 1
-        self.st = SetTransformer(self.num_embedding_dim, num_outputs, self.num_embedding_dim, num_inds=32,
-                                 dim_hidden=128, num_heads=4, ln=False)
+        self.set_transformer_negative = SetTransformer(self.num_embedding_dim, num_outputs, self.num_embedding_dim,
+                                                       num_inds=32,
+                                                       dim_hidden=128, num_heads=4, ln=False)
+        self.set_transformer_positive = SetTransformer(self.num_embedding_dim, num_outputs, self.num_embedding_dim,
+                                                       num_inds=32,
+                                                       dim_hidden=128, num_heads=4, ln=False)
 
         self.fc0 = nn.Sequential(nn.BatchNorm1d(self.num_embedding_dim + self.num_embedding_dim),
                                  nn.Linear(in_features=self.num_embedding_dim + self.num_embedding_dim,
                                            out_features=self.num_outputs))
 
     def forward(self, xpos, xneg):
-        assert xpos.shape == xneg.shape
+        #assert xpos.shape == xneg.shape
         # (1) Get embeddings
         xpos = self.embeddings(xpos)
         xneg = self.embeddings(xneg)
-        xpos = torch.squeeze(self.st(xpos), dim=1)
-        xneg = torch.squeeze(self.st(xneg), dim=1)
+        xpos = torch.squeeze(self.set_transformer_positive(xpos), dim=1)
+        xneg = torch.squeeze(self.set_transformer_negative(xneg), dim=1)
         x = torch.cat((xpos, xneg), 1)
         # (3) (BN, LN, ReLU )(x)
         return torch.sigmoid(self.fc0(x))

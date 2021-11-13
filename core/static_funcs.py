@@ -12,9 +12,11 @@ from owlapy.render import DLSyntaxObjectRenderer
 from owlapy.model import OWLObjectSomeValuesFrom, OWLObjectAllValuesFrom
 import random
 
+from random import randint
+
 
 def generate_random_learning_problems(instance_idx_mapping: Dict, target_idx_individuals: List[List[int]],
-                                      args: Dict) -> List[Tuple[List[int], List[int]]]:
+                                      args: Dict) -> Tuple[List[int], List[int]]:
     """
     Generate Learning problems
     :param instance_idx_mapping:
@@ -26,45 +28,20 @@ def generate_random_learning_problems(instance_idx_mapping: Dict, target_idx_ind
     assert isinstance(target_idx_individuals, list)
     assert isinstance(target_idx_individuals[0], list)
     assert isinstance(target_idx_individuals[0][0], int)
-    # (1) Obtain set of instance idx to sample negative examples via set difference
-    instances_idx_set = set(instance_idx_mapping.values())
     instances_idx_list = list(instance_idx_mapping.values())
 
-    X = []
-    size_of_positive_example_set = args['num_individual_per_example']
-    # Random Learning Problems;
-    # https://docs.python.org/3/library/random.html#random.choices
-
+    pos_examples = []
+    neg_examples = []
+    num_individual_per_example = args['num_individual_per_example']
     for i in range(args['num_of_learning_problems_training']):
-        pos = random.choices(instances_idx_list, k=size_of_positive_example_set)
-        neg = random.choices(instances_idx_list, k=size_of_positive_example_set)
-        X.append((pos, neg))
+        # Varianable length
+        # pos_examples.append(random.choices(instances_idx_list, k=randint(1, max_num_individual_per_example)))
+        # neg_examples.append(random.choices(instances_idx_list, k=randint(1, max_num_individual_per_example)))
 
-    return X
+        pos_examples.append(random.choices(instances_idx_list, k=num_individual_per_example))
+        neg_examples.append(random.choices(instances_idx_list, k=num_individual_per_example))
 
-
-"""
-
-def generate_training_data_old(kb, args):
-    # (2) Generate Class Expressions semi-randomly
-    lpg = LearningProblemGenerator(knowledge_base=kb,
-                                   min_length=args['min_length'],
-                                   max_length=args['max_length'],
-                                   min_num_instances=args[
-                                                         'min_num_instances_ratio_per_concept'] * kb.individuals_count(),
-                                   max_num_instances=args[
-                                                         'max_num_instances_ratio_per_concept'] * kb.individuals_count())
-    # (3) Obtain labels
-    instance_idx_mapping = {individual.get_iri().as_str(): i for i, individual in enumerate(kb.individuals())}
-    target_class_expressions, target_individuals = generate_target_class_expressions(lpg, kb,args)
-    target_idx_individuals = [[instance_idx_mapping[x] for x in i] for i in target_individuals]
-
-    learning_problems: List[Tuple[List[int], List[int]]] = generate_random_learning_problems(instance_idx_mapping,
-                                                                                             target_idx_individuals,
-                                                                                             args)
-
-    return learning_problems, instance_idx_mapping, target_class_expressions, target_idx_individuals
-"""
+    return pos_examples, neg_examples
 
 
 def apply_rho_on_rl_state(rl_state, rho, kb):
@@ -75,7 +52,13 @@ def apply_rho_on_rl_state(rl_state, rho, kb):
         yield next_rl_state
 
 
-def generate_training_data(kb, args):
+def generate_training_data(kb, args, logger):
+    """
+
+    :param kb:
+    :param args:
+    :return:
+    """
     # (3) Obtain labels
     instance_idx_mapping = {individual.get_iri().as_str(): i for i, individual in enumerate(kb.individuals())}
     renderer = DLSyntaxObjectRenderer()
@@ -95,13 +78,15 @@ def generate_training_data(kb, args):
             if isinstance(i.concept, OWLObjectAllValuesFrom) or isinstance(i.concept, OWLObjectSomeValuesFrom):
                 quantifiers.add(i)
             if len(target_class_expressions) == number_of_target_expressions:
+                logger.info(f'{number_of_target_expressions} target expressions generated')
                 break
-    for selected_states in quantifiers:
-        for ref_selected_states in apply_rho_on_rl_state(selected_states, rho, kb):
-            if len(ref_selected_states.instances) > 0:
-                target_class_expressions.add(ref_selected_states)
-        if len(target_class_expressions) == number_of_target_expressions:
-            break
+    if len(target_class_expressions) < number_of_target_expressions:
+        for selected_states in quantifiers:
+            for ref_selected_states in apply_rho_on_rl_state(selected_states, rho, kb):
+                if len(ref_selected_states.instances) > 0:
+                    target_class_expressions.add(ref_selected_states)
+                    if len(target_class_expressions) == number_of_target_expressions:
+                        break
 
     # Sanity checking:target_class_expressions must contain sane number of unique expressions
     assert len({renderer.render(i.concept) for i in target_class_expressions}) == len(target_class_expressions)
@@ -115,11 +100,10 @@ def generate_training_data(kb, args):
 
     target_idx_individuals = [[instance_idx_mapping[x] for x in i] for i in target_individuals]
 
-    learning_problems: List[Tuple[List[int], List[int]]] = generate_random_learning_problems(instance_idx_mapping,
-                                                                                             target_idx_individuals,
-                                                                                             args)
+    (e_pos, e_neg) = generate_random_learning_problems(instance_idx_mapping, target_idx_individuals, args)
 
-    return learning_problems, instance_idx_mapping, target_class_expressions, target_idx_individuals
+    return {'e_pos': e_pos, 'e_neg': e_neg, 'instance_idx_mapping': instance_idx_mapping,
+            'target_class_expressions': target_class_expressions, 'target_idx_individuals': target_idx_individuals}
 
 
 def generate_target_class_expressions(lpg, kb, args):

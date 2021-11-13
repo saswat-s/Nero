@@ -11,7 +11,8 @@ import itertools
 
 
 class LP:
-    def __init__(self, learning_problems: List[List[int]], instance_idx_mapping, target_class_expressions,
+    def __init__(self, *, e_pos: List[List[int]], e_neg: List[List[int]], instance_idx_mapping,
+                 target_class_expressions,
                  target_idx_individuals):
         """
 
@@ -20,7 +21,10 @@ class LP:
         :param target_class_expressions:
         :param target_idx_individuals:
         """
-        self.data_points = learning_problems
+        assert len(e_pos) == len(e_neg)
+        self.e_pos = e_pos
+        self.e_neg = e_neg
+        self.num_learning_problems=len(self.e_pos)
         self.instance_idx_mapping = instance_idx_mapping
         self.target_class_expressions = target_class_expressions
         self.target_idx_individuals = target_idx_individuals
@@ -29,7 +33,7 @@ class LP:
         return f'<LP object at {hex(id(self))}>\tdata_points: {self.data_points.shape}\t|target_class_expressions|:{len(self.target_class_expressions)}'
 
     def __len__(self):
-        return len(self.data_points)
+        return self.num_learning_problems
 
 
 def ClosedWorld_ReasonerFactory(onto: OWLOntology) -> OWLReasoner:
@@ -41,7 +45,7 @@ def ClosedWorld_ReasonerFactory(onto: OWLOntology) -> OWLReasoner:
     return reasoner
 
 
-def dummy(all_targets, pos, neg):
+def compute_f1_target(all_targets, pos, neg):
     res = []
     pos = set(pos)
     neg = set(neg)
@@ -49,6 +53,7 @@ def dummy(all_targets, pos, neg):
         target_instances: target_instances[int]  # containing ordered positive and negative examples
         res.append(f_measure(instances=set(target_instances), positive_examples=pos, negative_examples=neg))
     return res
+
 
 class Dataset(torch.utils.data.Dataset):
     def __init__(self, lp: LP):
@@ -58,35 +63,11 @@ class Dataset(torch.utils.data.Dataset):
 
         with Pool(processes=4) as pool:
             self.Y = list(
-                pool.starmap(dummy, ((self.lp.target_idx_individuals, pos, neg) for (pos, neg) in self.lp.data_points)))
+                pool.starmap(compute_f1_target, ((self.lp.target_idx_individuals, pos, neg) for (pos, neg) in zip(self.lp.e_pos, self.lp.e_neg))))
 
-        """
-        for pos, neg in self.lp.data_points:
-            res = []
-            pos = set(pos)
-            neg = set(neg)
-            for target_instances in self.lp.target_idx_individuals:
-                target_instances: target_instances[int]  # containing ordered positive and negative examples
-                res.append(f1_score(instances=set(target_instances), positive_examples=pos, negative_examples=neg))
-            self.Y.append(res)
-        """
-        self.X = torch.LongTensor(self.lp.data_points)
+        self.Xpos = torch.LongTensor(self.lp.e_pos)
+        self.Xneg = torch.LongTensor(self.lp.e_neg)
         self.Y = torch.FloatTensor(self.Y)
-        n, two, size_examples = self.X.shape
-
-        self.X = torch.reshape(self.X, (n, two * size_examples))
-        # Expensive Sanity checking
-        # Flatten data points into a single list
-        # Flatten data points stored in pytorchTensor
-        # Through utilizing the order of datapoints, check whether they are equal
-        assert list(itertools.chain.from_iterable(itertools.chain.from_iterable(self.lp.data_points))) == list(
-            itertools.chain.from_iterable(self.X.tolist()))
-        # To free some memory
-        self.lp.data_points = None
-
-        self.Xpos, self.Xneg = torch.hsplit(self.X, 2)
-
-        del self.X
 
     def __len__(self):
         return self.num_data_points
