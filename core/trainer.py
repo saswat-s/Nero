@@ -117,7 +117,7 @@ class Trainer:
         # (2) Describe the training setting.
         self.describe_configuration(model)
         # (3) Initialize the training
-        loss_func = torch.nn.CrossEntropyLoss()
+        loss_func = torch.nn.MSELoss()
         optimizer = torch.optim.Adam(model.parameters(), lr=self.args['learning_rate'])
         self.logger.info('Data being labelled')
         # (4) Initialize the mini-batch loader
@@ -135,6 +135,7 @@ class Trainer:
         # (4) Start training loop
         printout_constant = (self.args['num_epochs'] // 20) + 1
         start_time = time.time()
+        # For every some epochs, we should change the size of input
         for it in range(1, self.args['num_epochs'] + 1):
             epoch_loss = 0
             # (5) Mini-batch.
@@ -180,9 +181,6 @@ class Trainer:
         df.to_csv(self.storage_path + '/instance_embeddings.csv')
 
         if self.args['plot_embeddings'] > 0:
-            # import umap
-            # reducer = umap.UMAP()
-            # low_emb = reducer.fit_transform(embeddings)
             low_emb = PCA(n_components=2).fit_transform(embeddings)
             plt.scatter(low_emb[:, 0], low_emb[:, 1])
             plt.show()

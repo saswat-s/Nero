@@ -57,10 +57,14 @@ class ST(torch.nn.Module):
         self.embeddings = torch.nn.Embedding(self.num_instances, self.num_embedding_dim)
         # Like a set wise flattening
         num_outputs = 1
-        self.set_transformer_negative = SetTransformer(self.num_embedding_dim, num_outputs, self.num_embedding_dim,
+        self.set_transformer_negative = SetTransformer(dim_input=self.num_embedding_dim,
+                                                       num_outputs=num_outputs,
+                                                       dim_output=self.num_embedding_dim,
                                                        num_inds=32,
                                                        dim_hidden=128, num_heads=4, ln=False)
-        self.set_transformer_positive = SetTransformer(self.num_embedding_dim, num_outputs, self.num_embedding_dim,
+        self.set_transformer_positive = SetTransformer(dim_input=self.num_embedding_dim,
+                                                       num_outputs=num_outputs,
+                                                       dim_output=self.num_embedding_dim,
                                                        num_inds=32,
                                                        dim_hidden=128, num_heads=4, ln=False)
 

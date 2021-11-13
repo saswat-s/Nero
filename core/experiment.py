@@ -34,39 +34,39 @@ class Experiment:
                                 reasoner_factory=ClosedWorld_ReasonerFactory)
         assert self.kb.individuals_count() > 0
         self.logger.info('Learning Problems being generated')
-        self.lp = LP(**generate_training_data(self.kb, self.args,logger=self.logger))
+        # @TODO: Generate and label examples on the fly
+        self.lp = LP(**generate_training_data(self.kb, self.args, logger=self.logger))
         self.args['storage_path'] = self.storage_path
         self.logger.info('Trainer initialized')
         self.trainer = Trainer(knowledge_base=self.kb, learning_problems=self.lp, args=self.args, logger=self.logger)
+        self.instance_str = list(self.lp.instance_idx_mapping.keys())
 
     def start(self):
         self.logger.info('Experiment starts')
 
         # (1) Train NCEL
+
         ncel = self.trainer.start()
+        """
+        lp = [(random.choices(self.instance_str, k=self.args['num_individual_per_example']),
+               random.choices(self.instance_str, k=self.args['num_individual_per_example'])) for _ in
+              range(self.args['num_of_learning_problems_testing'])]
+        """
+        with open(self.args['path_lp']) as json_file:
+            settings = json.load(json_file)
+        lp = [(list(v['positive_examples']), list(v['negative_examples'])) for k, v in
+              settings['problems'].items()]
+
         # (2) Evaluate NCEL
-        self.evaluate(ncel, self.lp, self.args)
+        self.evaluate(ncel, lp, self.args)
 
     def evaluate(self, ncel, lp, args):
         self.logger.info('Evaluation Starts')
-        str_all_targets = [i for i in ncel.get_target_class_expressions()]
 
-        instance_str = list(lp.instance_idx_mapping.keys())
-        # (1) Enter the absolute path of the input knowledge base
-        # (3) Initialize CELOE, OCEL, and ELTL
-        celoe = DLLearnerBinder(binary_path=args['dl_learner_binary_path'], kb_path=args['path_knowledge_base'],
-                                model='celoe')
-        # (4) Fit (4) on the learning problems and show the best concept.
         ncel_results = dict()
         celoe_results = dict()
 
-        for _ in range(args['num_of_learning_problems_testing']):
-            # Variable
-            #p = random.choices(instance_str, k=randint(1, args['max_num_individual_per_example']))
-            #n = random.choices(instance_str, k=randint(1, args['max_num_individual_per_example']))
-            p = random.choices(instance_str, k=args['num_individual_per_example'])
-            n = random.choices(instance_str, k=args['num_individual_per_example'])
-
+        for _, (p, n) in enumerate(lp):
             ncel_report = ncel.fit(pos=p, neg=n, topK=args['topK'])
             ncel_report.update({'P': p, 'N': n, 'F-measure': f_measure(instances=ncel_report['Instances'],
                                                                        positive_examples=set(p),
@@ -74,23 +74,22 @@ class Experiment:
                                 })
 
             ncel_results[_] = ncel_report
-            best_pred_celoe = celoe.fit(pos=p, neg=n, max_runtime=1).best_hypothesis()
-            if best_pred_celoe['Prediction'] in str_all_targets:
-                pass
-            else:
-                self.logger.info(f'{best_pred_celoe["Prediction"]} not found in labels')
-            celoe_results[_] = {'P': p, 'N': n,
-                                'Prediction': best_pred_celoe['Prediction'],
-                                'F-measure': best_pred_celoe['F-measure'],
-                                'NumClassTested': best_pred_celoe['NumClassTested'],
-                                'Runtime': best_pred_celoe['Runtime'],
-                                }
+            if args['eval_dl_learner']:
+                celoe = DLLearnerBinder(binary_path=args['dl_learner_binary_path'], kb_path=args['path_knowledge_base'],
+                                        model='celoe')
+                best_pred_celoe = celoe.fit(pos=p, neg=n, max_runtime=3).best_hypothesis()
+                celoe_results[_] = {'P': p, 'N': n,
+                                    'Prediction': best_pred_celoe['Prediction'],
+                                    'F-measure': best_pred_celoe['F-measure'],
+                                    'NumClassTested': best_pred_celoe['NumClassTested'],
+                                    'Runtime': best_pred_celoe['Runtime'],
+                                    }
         avg_f1_ncel = np.array([i['F-measure'] for i in ncel_results.values()]).mean()
         avg_runtime_ncel = np.array([i['Runtime'] for i in ncel_results.values()]).mean()
         avg_expression_ncel = np.array([i['NumClassTested'] for i in ncel_results.values()]).mean()
         self.logger.info(
-            f'Average F-measure NCEL:{avg_f1_ncel}\t Avg. Runtime:{avg_runtime_ncel}\t Avg. Expression Tested:{avg_expression_ncel} in {args["num_of_learning_problems_testing"]} randomly generated learning problems')
-        if len(celoe_results) > 0:
+            f'Average F-measure NCEL:{avg_f1_ncel}\t Avg. Runtime:{avg_runtime_ncel}\t Avg. Expression Tested:{avg_expression_ncel} in {len(lp)} ')
+        if args['eval_dl_learner']:
             avg_f1_celoe = np.array([i['F-measure'] for i in celoe_results.values()]).mean()
             avg_runtime_celoe = np.array([i['Runtime'] for i in celoe_results.values()]).mean()
             avg_expression_celoe = np.array([i['NumClassTested'] for i in celoe_results.values()]).mean()

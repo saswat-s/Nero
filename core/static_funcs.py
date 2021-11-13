@@ -82,12 +82,15 @@ def generate_training_data(kb, args, logger):
                 break
     if len(target_class_expressions) < number_of_target_expressions:
         for selected_states in quantifiers:
+            if len(target_class_expressions) == number_of_target_expressions:
+                break
             for ref_selected_states in apply_rho_on_rl_state(selected_states, rho, kb):
                 if len(ref_selected_states.instances) > 0:
-                    target_class_expressions.add(ref_selected_states)
                     if len(target_class_expressions) == number_of_target_expressions:
                         break
-
+                    target_class_expressions.add(ref_selected_states)
+    # @TODO refine target_class_expressions again
+    assert len(target_class_expressions)==number_of_target_expressions
     # Sanity checking:target_class_expressions must contain sane number of unique expressions
     assert len({renderer.render(i.concept) for i in target_class_expressions}) == len(target_class_expressions)
 
