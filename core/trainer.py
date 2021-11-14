@@ -25,48 +25,17 @@ from sklearn.decomposition import PCA
 class Trainer:
     """ Trainer of Neural Class Expression Learner"""
 
-    def __init__(self, knowledge_base: KnowledgeBase, learning_problems, args, logger):
-        self.knowledge_base = knowledge_base
+    def __init__(self, learning_problems, args, logger):
+        # self.knowledge_base = knowledge_base
         self.learning_problems = learning_problems
         # List of URIs representing instances / individuals
         self.instances = None
         # Input arguments
         self.args = args
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        self.renderer = DLSyntaxObjectRenderer()
+        # self.renderer = DLSyntaxObjectRenderer()
         self.logger = logger
         self.storage_path = self.args['storage_path']
-
-        # Describe and store the setting of the trainer
-        self.__describe_and_store_setting()
-
-    def __describe_and_store_setting(self):
-        # cuda device
-        self.logger.info('Device:{0}'.format(self.device))
-        if torch.cuda.is_available():
-            self.logger.info('Name of selected Device:{0}'.format(torch.cuda.get_device_name(self.device)))
-
-        self.save_as_json({i: {'Pos': e_pos, 'Neg': e_neg} for i, (e_pos, e_neg) in
-                           enumerate(zip(self.learning_problems.e_pos, self.learning_problems.e_neg))},
-                          name='training_learning_problems')
-
-        self.save_as_json(self.learning_problems.instance_idx_mapping, name='instance_idx_mapping')
-        self.save_as_json({i: {'DL-Syntax': self.renderer.render(cl.concept),
-                               'ExpressionChain': [self.renderer.render(_.concept) for _ in retrieve_concept_chain(cl)]}
-                           for i, cl in
-                           enumerate(self.learning_problems.target_class_expressions)}, name='target_class_expressions')
-        self.logger.info('Learning Problem object serialized')
-        self.save_as_json(self.args, name='settings')
-
-        self.logger.info('Describe the experiment')
-        self.logger.info(
-            f'Number of named classes: {len([i for i in self.knowledge_base.ontology().classes_in_signature()])}\t'
-            f'Number of individuals: {self.knowledge_base.individuals_count()}'
-        )
-
-    def save_as_json(self, obj, name=None):
-        with open(self.storage_path + f'/{name}.json', 'w') as file_descriptor:
-            json.dump(obj, file_descriptor, indent=3)
 
     def describe_configuration(self, model):
         """
@@ -93,19 +62,18 @@ class Trainer:
 
     def neural_architecture_selection(self):
         param = {'num_embedding_dim': self.args['num_embedding_dim'],
-                 'num_instances': self.knowledge_base.individuals_count(),
+                 'num_instances': self.args['num_instances'],
                  'num_outputs': len(self.learning_problems.target_idx_individuals)}
 
         arc = self.args['neural_architecture']
-        if arc == 'PIL':
-            model = PIL(param)
+        if arc == 'DeepSet':
+            model = DeepSet(param)
         elif arc == 'ST':
             model = ST(param)
         else:
             raise NotImplementedError('There is no other model')
 
         return NCEL(model=model,
-                    kb=self.knowledge_base,
                     quality_func=f_measure,
                     target_class_expressions=self.learning_problems.target_class_expressions,
                     instance_idx_mapping=self.learning_problems.instance_idx_mapping)
@@ -133,7 +101,7 @@ class Trainer:
         # (3) Store average loss per epoch
         losses = []
         # (4) Start training loop
-        printout_constant = (self.args['num_epochs'] // 20) + 1
+        printout_constant = (self.args['num_epochs'] // 10) + 1
         start_time = time.time()
         # For every some epochs, we should change the size of input
         for it in range(1, self.args['num_epochs'] + 1):
@@ -160,6 +128,10 @@ class Trainer:
             # (7) Print-out
             if it % printout_constant == 0:
                 self.logger.info(f'{it}.th epoch loss: {epoch_loss}')
+
+            if it % self.args['val_at_every_epochs'] == 0:
+                self.validate(model, lp=self.learning_problems, args={'topK': 50})
+                model.train()
         training_time = time.time() - start_time
         # Save
         self.logger.info(f'TrainingRunTime {training_time / 60:.3f} minutes')
@@ -171,6 +143,25 @@ class Trainer:
         model.eval()
         self.logger.info('Training Loop ends')
         return model
+
+    def validate(self, ncel, lp, args):
+        self.logger.info('Validation Starts')
+        ncel.eval()
+        ncel_results = dict()
+
+        for _, (p, n) in enumerate(lp):
+            ncel_report = ncel.fit(pos=p, neg=n, topK=args['topK'], local_search=False)
+            ncel_report.update({'P': p, 'N': n, 'F-measure': f_measure(instances=ncel_report['Instances'],
+                                                                       positive_examples=set(p),
+                                                                       negative_examples=set(n)),
+                                })
+
+            ncel_results[_] = ncel_report
+        avg_f1_ncel = np.array([i['F-measure'] for i in ncel_results.values()]).mean()
+        avg_runtime_ncel = np.array([i['Runtime'] for i in ncel_results.values()]).mean()
+        avg_expression_ncel = np.array([i['NumClassTested'] for i in ncel_results.values()]).mean()
+        self.logger.info(
+            f'Avg. F-measure NCEL:{avg_f1_ncel}\t Avg. Runtime:{avg_runtime_ncel}\t Avg. Expression Tested:{avg_expression_ncel} in {len(lp)} LPs ')
 
     def start(self) -> NCEL:
         self.logger.info('Start the training phase')

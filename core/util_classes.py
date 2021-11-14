@@ -24,16 +24,22 @@ class LP:
         assert len(e_pos) == len(e_neg)
         self.e_pos = e_pos
         self.e_neg = e_neg
-        self.num_learning_problems=len(self.e_pos)
+        self.num_learning_problems = len(self.e_pos)
         self.instance_idx_mapping = instance_idx_mapping
+        self.idx_instance_mapping = dict(zip(instance_idx_mapping.values(),instance_idx_mapping.keys()))
+
         self.target_class_expressions = target_class_expressions
         self.target_idx_individuals = target_idx_individuals
 
     def __str__(self):
-        return f'<LP object at {hex(id(self))}>\tdata_points: {self.data_points.shape}\t|target_class_expressions|:{len(self.target_class_expressions)}'
+        return f'<LP object at {hex(id(self))}>\tdata_points: {self.num_learning_problems}\t|target_class_expressions|:{len(self.target_class_expressions)}'
 
     def __len__(self):
         return self.num_learning_problems
+
+    def __iter__(self):
+        for pos, neg in zip(self.e_pos, self.e_neg):
+            yield [self.idx_instance_mapping[i] for i in pos], [self.idx_instance_mapping[i] for i in neg]
 
 
 def ClosedWorld_ReasonerFactory(onto: OWLOntology) -> OWLReasoner:
@@ -63,7 +69,8 @@ class Dataset(torch.utils.data.Dataset):
 
         with Pool(processes=4) as pool:
             self.Y = list(
-                pool.starmap(compute_f1_target, ((self.lp.target_idx_individuals, pos, neg) for (pos, neg) in zip(self.lp.e_pos, self.lp.e_neg))))
+                pool.starmap(compute_f1_target, ((self.lp.target_idx_individuals, pos, neg) for (pos, neg) in
+                                                 zip(self.lp.e_pos, self.lp.e_neg))))
 
         self.Xpos = torch.LongTensor(self.lp.e_pos)
         self.Xneg = torch.LongTensor(self.lp.e_neg)

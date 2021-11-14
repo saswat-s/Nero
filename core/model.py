@@ -11,11 +11,10 @@ import time
 
 
 class NCEL:
-    def __init__(self, model: torch.nn.Module, kb, quality_func, target_class_expressions: List[RL_State],
+    def __init__(self, model: torch.nn.Module,
+                 quality_func, target_class_expressions: List[RL_State],
                  instance_idx_mapping: Dict):
         self.model = model
-        self.kb = kb
-        self.rho = LengthBasedRefinement(knowledge_base=self.kb)
         self.quality_func = quality_func
         self.target_class_expressions = target_class_expressions
         self.instance_idx_mapping = instance_idx_mapping
@@ -112,7 +111,7 @@ class NCEL:
                 positive_examples=set_pos, negative_examples=set_neg)
             results.append((s, self.target_class_expressions[i]))
             if s == 1.0:
-                print('Goal Found in the tunnelling')
+                # print('Goal Found in the tunnelling')
                 goal_found = True
                 break
         # self.__intersection_topK(results, set_pos, set_neg)

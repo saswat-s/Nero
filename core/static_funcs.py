@@ -5,6 +5,7 @@ import logging
 import os
 import time
 import torch
+import json
 from collections import deque
 from ontolearn.learning_problem_generator import LearningProblemGenerator
 from ontolearn.refinement_operators import LengthBasedRefinement
@@ -14,6 +15,10 @@ import random
 
 from random import randint
 
+
+def save_as_json(*,storage_path=None,obj=None, name=None):
+    with open(storage_path + f'/{name}.json', 'w') as file_descriptor:
+        json.dump(obj, file_descriptor, indent=3)
 
 def generate_random_learning_problems(instance_idx_mapping: Dict, target_idx_individuals: List[List[int]],
                                       args: Dict) -> Tuple[List[int], List[int]]:
@@ -55,6 +60,7 @@ def apply_rho_on_rl_state(rl_state, rho, kb):
 def generate_training_data(kb, args, logger):
     """
 
+    :param logger:
     :param kb:
     :param args:
     :return:
@@ -90,7 +96,7 @@ def generate_training_data(kb, args, logger):
                         break
                     target_class_expressions.add(ref_selected_states)
     # @TODO refine target_class_expressions again
-    assert len(target_class_expressions)==number_of_target_expressions
+    assert len(target_class_expressions) == number_of_target_expressions
     # Sanity checking:target_class_expressions must contain sane number of unique expressions
     assert len({renderer.render(i.concept) for i in target_class_expressions}) == len(target_class_expressions)
 
@@ -101,7 +107,7 @@ def generate_training_data(kb, args, logger):
     target_individuals: List[Set[str]] = [{i.get_iri().as_str() for i in s.instances} for s in
                                           target_class_expressions]
 
-    target_idx_individuals = [[instance_idx_mapping[x] for x in i] for i in target_individuals]
+    target_idx_individuals: List[List[int]] = [[instance_idx_mapping[x] for x in i] for i in target_individuals]
 
     (e_pos, e_neg) = generate_random_learning_problems(instance_idx_mapping, target_idx_individuals, args)
 

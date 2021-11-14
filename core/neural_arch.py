@@ -4,15 +4,19 @@ import math
 import torch.nn.functional as F
 
 
-class PIL(torch.nn.Module):
+class DeepSet(torch.nn.Module):
     """
-    Permutation invariant Affine Transformation
-    x=[mean(E^+),std(E^+),sum(E^+),mean(E^-),std(E^-),sum(E^-)]
+
+     f( pool ( {g(x1), ... g(xn) }) ), f and g continues funcs, pool sum => universal
+
+     g(.) is encoder
+     f(pool(.)) is decoder
+
     """
 
     def __init__(self, param):
-        super(PIL, self).__init__()
-        self.name = 'DT'
+        super(DeepSet, self).__init__()
+        self.name = 'DeepSet'
         self.param = param
 
         self.num_instances = self.param['num_instances']
@@ -22,21 +26,21 @@ class PIL(torch.nn.Module):
 
         self.embeddings = torch.nn.Embedding(self.num_instances, self.num_embedding_dim)
         # 3 permutation invariant representations for positive and negative examples.
-        input_size = int(self.num_embedding_dim * 6)
-        self.fc0 = nn.Sequential(nn.BatchNorm1d(input_size),
-                                 nn.Linear(in_features=input_size,
+        self.fc0 = nn.Sequential(nn.BatchNorm1d(self.num_embedding_dim),
+                                 nn.Linear(in_features=self.num_embedding_dim,
+                                           out_features=self.num_outputs))
+        self.fc1 = nn.Sequential(nn.BatchNorm1d(self.num_embedding_dim),
+                                 nn.Linear(in_features=self.num_embedding_dim,
                                            out_features=self.num_outputs))
 
     def forward(self, xpos, xneg):
-        # (1) Get embeddings
-        xpos = self.embeddings(xpos)
-        xneg = self.embeddings(xneg)
-
-        # (2) Permutation Invariant Representations
-        x = torch.cat((torch.mean(xpos, 1), torch.sum(xpos, 1), torch.std(xpos, 1),
-                       torch.mean(xneg, 1), torch.sum(xneg, 1), torch.std(xneg, 1)), 1)
-        # (3) (BN, LN, ReLU )(x)
-        return torch.sigmoid(self.fc0(x))
+        # (1) Get Embeddings
+        # (2) Apply a pooling operation/ we used sum due to Deepset paper universal approx. theorem
+        # (3)
+        # f( pool ( {g(x1), ... g(xn) }) ), f and g continues funcs, pool sum => universal
+        xpos_score = self.fc0(torch.sum(self.embeddings(xpos), 1))
+        xneg_score = self.fc1(torch.sum(self.embeddings(xneg), 1))
+        return torch.sigmoid(xpos_score - xneg_score)
 
 
 class ST(torch.nn.Module):
@@ -73,7 +77,7 @@ class ST(torch.nn.Module):
                                            out_features=self.num_outputs))
 
     def forward(self, xpos, xneg):
-        #assert xpos.shape == xneg.shape
+        # assert xpos.shape == xneg.shape
         # (1) Get embeddings
         xpos = self.embeddings(xpos)
         xneg = self.embeddings(xneg)

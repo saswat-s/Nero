@@ -17,35 +17,71 @@ from .trainer import Trainer
 import numpy as np
 import pandas as pd
 from collections import deque
-import json
 import os
 from random import randint
 
 
 class Experiment:
     def __init__(self, args):
+        self.args = args
+
+        # (1) Create Logging & Experiment folder for serialization
         self.storage_path, _ = create_experiment_folder(folder_name='Experiments')
         self.logger = create_logger(name='Experimenter', p=self.storage_path)
-
-        self.args = args
-        self.logger.info('Knowledge Base being Initialized')
-        # Initialize instances to conduct the experiment
-        self.kb = KnowledgeBase(path=self.args['path_knowledge_base'],
-                                reasoner_factory=ClosedWorld_ReasonerFactory)
-        assert self.kb.individuals_count() > 0
-        self.logger.info('Learning Problems being generated')
-        # @TODO: Generate and label examples on the fly
-        self.lp = LP(**generate_training_data(self.kb, self.args, logger=self.logger))
         self.args['storage_path'] = self.storage_path
-        self.logger.info('Trainer initialized')
-        self.trainer = Trainer(knowledge_base=self.kb, learning_problems=self.lp, args=self.args, logger=self.logger)
+
+        # (2) Initialize KB
+        self.logger.info('Knowledge Base being Initialized')
+        kb = KnowledgeBase(path=self.args['path_knowledge_base'],
+                           reasoner_factory=ClosedWorld_ReasonerFactory)
+        self.args['num_instances'] = kb.individuals_count()
+        self.args['num_named_classes'] = len([i for i in kb.ontology().classes_in_signature()])
+
+        # (3) Initialize Learning problems
+        self.logger.info('Learning Problems being generated')
+        self.lp = LP(**generate_training_data(kb, self.args, logger=self.logger))
+        del kb
+
+        # (4) Init Trainer
+        self.trainer = Trainer(learning_problems=self.lp, args=self.args, logger=self.logger)
+
         self.instance_str = list(self.lp.instance_idx_mapping.keys())
+        self.__describe_and_store()
+
+    def __describe_and_store(self):
+        assert self.args['num_instances'] > 0
+        # Sanity checking
+        renderer = DLSyntaxObjectRenderer()
+        # cuda device
+        self.logger.info('Device:{0}'.format(self.trainer.device))
+        if torch.cuda.is_available():
+            self.logger.info('Name of selected Device:{0}'.format(torch.cuda.get_device_name(self.trainer.device)))
+
+        save_as_json(storage_path=self.storage_path,
+                     obj={i: {'Pos': e_pos, 'Neg': e_neg} for i, (e_pos, e_neg) in
+                          enumerate(zip(self.lp.e_pos, self.lp.e_neg))},
+                     name='training_learning_problems')
+
+        save_as_json(storage_path=self.storage_path,
+                     obj=self.lp.instance_idx_mapping, name='instance_idx_mapping')
+        save_as_json(storage_path=self.storage_path, obj={i: {'DL-Syntax': renderer.render(cl.concept),
+                                                              'ExpressionChain': [renderer.render(_.concept) for _ in
+                                                                                  retrieve_concept_chain(cl)]}
+                                                          for i, cl in
+                                                          enumerate(self.lp.target_class_expressions)},
+                     name='target_class_expressions')
+        self.logger.info('Learning Problem object serialized')
+        save_as_json(storage_path=self.storage_path, obj=self.args, name='settings')
+
+        self.logger.info('Describe the experiment')
+        self.logger.info(
+            f'Number of named classes: {self.args["num_named_classes"]}\t'
+            f'Number of individuals: {self.args["num_instances"]}'
+        )
 
     def start(self):
         self.logger.info('Experiment starts')
-
         # (1) Train NCEL
-
         ncel = self.trainer.start()
         """
         lp = [(random.choices(self.instance_str, k=self.args['num_individual_per_example']),
@@ -67,7 +103,7 @@ class Experiment:
         celoe_results = dict()
 
         for _, (p, n) in enumerate(lp):
-            ncel_report = ncel.fit(pos=p, neg=n, topK=args['topK'])
+            ncel_report = ncel.fit(pos=p, neg=n, topK=args['topK'], local_search=False)
             ncel_report.update({'P': p, 'N': n, 'F-measure': f_measure(instances=ncel_report['Instances'],
                                                                        positive_examples=set(p),
                                                                        negative_examples=set(n)),
