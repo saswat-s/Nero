@@ -16,37 +16,24 @@ import random
 from random import randint
 
 
-def save_as_json(*,storage_path=None,obj=None, name=None):
+class TargetClassExpression:
+    def __init__(self, name: str, individuals: Set, idx_individuals: Set):
+        self.name = name
+        self.individuals = individuals
+        self.idx_individuals = idx_individuals
+        assert len(self.individuals) == len(self.idx_individuals)
+
+    def __str__(self):
+        return f'{self.name}\tIndv:{len(self.individuals)}'
+
+    def __repr__(self):
+        return self.__str__()
+
+
+def save_as_json(*, storage_path=None, obj=None, name=None):
     with open(storage_path + f'/{name}.json', 'w') as file_descriptor:
         json.dump(obj, file_descriptor, indent=3)
 
-def generate_random_learning_problems(instance_idx_mapping: Dict, target_idx_individuals: List[List[int]],
-                                      args: Dict) -> Tuple[List[int], List[int]]:
-    """
-    Generate Learning problems
-    :param instance_idx_mapping:
-    :param target_idx_individuals:
-    :param args: hyperparameters
-    :return: a list of ordered learning problems. Each inner list contains same amount of positive and negative
-     examples
-    """
-    assert isinstance(target_idx_individuals, list)
-    assert isinstance(target_idx_individuals[0], list)
-    assert isinstance(target_idx_individuals[0][0], int)
-    instances_idx_list = list(instance_idx_mapping.values())
-
-    pos_examples = []
-    neg_examples = []
-    num_individual_per_example = args['num_individual_per_example']
-    for i in range(args['num_of_learning_problems_training']):
-        # Varianable length
-        # pos_examples.append(random.choices(instances_idx_list, k=randint(1, max_num_individual_per_example)))
-        # neg_examples.append(random.choices(instances_idx_list, k=randint(1, max_num_individual_per_example)))
-
-        pos_examples.append(random.choices(instances_idx_list, k=num_individual_per_example))
-        neg_examples.append(random.choices(instances_idx_list, k=num_individual_per_example))
-
-    return pos_examples, neg_examples
 
 
 def apply_rho_on_rl_state(rl_state, rho, kb):
@@ -57,62 +44,6 @@ def apply_rho_on_rl_state(rl_state, rho, kb):
         yield next_rl_state
 
 
-def generate_training_data(kb, args, logger):
-    """
-
-    :param logger:
-    :param kb:
-    :param args:
-    :return:
-    """
-    # (3) Obtain labels
-    instance_idx_mapping = {individual.get_iri().as_str(): i for i, individual in enumerate(kb.individuals())}
-    renderer = DLSyntaxObjectRenderer()
-    number_of_target_expressions = args['number_of_target_expressions']
-    # Generate target_class_expressions
-    target_class_expressions = set()
-    rl_state = RL_State(kb.thing, parent_node=None, is_root=True)
-    rl_state.length = kb.cl(kb.thing)
-    rl_state.instances = set(kb.individuals(rl_state.concept))
-    target_class_expressions.add(rl_state)
-    quantifiers = set()
-
-    rho = LengthBasedRefinement(knowledge_base=kb)
-    for i in apply_rho_on_rl_state(rl_state, rho, kb):
-        if len(i.instances) > 0:
-            target_class_expressions.add(i)
-            if isinstance(i.concept, OWLObjectAllValuesFrom) or isinstance(i.concept, OWLObjectSomeValuesFrom):
-                quantifiers.add(i)
-            if len(target_class_expressions) == number_of_target_expressions:
-                logger.info(f'{number_of_target_expressions} target expressions generated')
-                break
-    if len(target_class_expressions) < number_of_target_expressions:
-        for selected_states in quantifiers:
-            if len(target_class_expressions) == number_of_target_expressions:
-                break
-            for ref_selected_states in apply_rho_on_rl_state(selected_states, rho, kb):
-                if len(ref_selected_states.instances) > 0:
-                    if len(target_class_expressions) == number_of_target_expressions:
-                        break
-                    target_class_expressions.add(ref_selected_states)
-    # @TODO refine target_class_expressions again
-    assert len(target_class_expressions) == number_of_target_expressions
-    # Sanity checking:target_class_expressions must contain sane number of unique expressions
-    assert len({renderer.render(i.concept) for i in target_class_expressions}) == len(target_class_expressions)
-
-    # Sort it for the convenience. Not a must ALC formulas
-    target_class_expressions: List[RL_State] = sorted(list(target_class_expressions), key=lambda x: x.length,
-                                                      reverse=False)
-    # All instances belonging to targets
-    target_individuals: List[Set[str]] = [{i.get_iri().as_str() for i in s.instances} for s in
-                                          target_class_expressions]
-
-    target_idx_individuals: List[List[int]] = [[instance_idx_mapping[x] for x in i] for i in target_individuals]
-
-    (e_pos, e_neg) = generate_random_learning_problems(instance_idx_mapping, target_idx_individuals, args)
-
-    return {'e_pos': e_pos, 'e_neg': e_neg, 'instance_idx_mapping': instance_idx_mapping,
-            'target_class_expressions': target_class_expressions, 'target_idx_individuals': target_idx_individuals}
 
 
 def generate_target_class_expressions(lpg, kb, args):
@@ -146,9 +77,12 @@ def generate_target_class_expressions(lpg, kb, args):
     # Sort it for the convenience. Not a must ALC formulas
     target_class_expressions: List[RL_State] = sorted(list(target_class_expressions), key=lambda x: x.length,
                                                       reverse=False)
+
     # All instances belonging to targets
     target_individuals: List[Set[str]] = [{i.get_iri().as_str() for i in s.instances} for s in
                                           target_class_expressions]
+    target_class_expressions: List[str] = [renderer.render(i.concept) for i in target_class_expressions]
+
     return target_class_expressions, target_individuals
 
 
@@ -173,7 +107,7 @@ def f_measure(*, instances: Set, positive_examples: Set, negative_examples: Set)
         return 0.0
 
     f_1 = 2 * ((precision * recall) / (precision + recall))
-    return round(f_1, 5)
+    return f_1
 
 
 def retrieve_concept_chain(rl_state: RL_State) -> List[RL_State]:

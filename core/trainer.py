@@ -43,16 +43,6 @@ class Trainer:
         :param model:
         :return:
         """
-        """
-        
-        self.logger.info("Info pertaining to dataset:{0}".format(self.dataset.info))
-        self.logger.info("Number of triples in training data:{0}".format(len(self.dataset.train)))
-        self.logger.info("Number of triples in validation data:{0}".format(len(self.dataset.valid)))
-        self.logger.info("Number of triples in testing data:{0}".format(len(self.dataset.test)))
-        self.logger.info("Number of entities:{0}".format(len(self.entity_idxs)))
-        self.logger.info("Number of relations:{0}".format(len(self.relation_idxs)))
-        self.logger.info("HyperParameter Settings:{0}".format(self.kwargs))
-        """
         self.logger.info(f'Training data size:{len(self.learning_problems)}\t'
                          f'Number of Labels:{len(self.learning_problems.target_class_expressions)}')
 
@@ -63,7 +53,7 @@ class Trainer:
     def neural_architecture_selection(self):
         param = {'num_embedding_dim': self.args['num_embedding_dim'],
                  'num_instances': self.args['num_instances'],
-                 'num_outputs': len(self.learning_problems.target_idx_individuals)}
+                 'num_outputs': len(self.learning_problems.target_class_expressions)}
 
         arc = self.args['neural_architecture']
         if arc == 'DeepSet':
@@ -84,8 +74,10 @@ class Trainer:
         model = self.neural_architecture_selection()
         # (2) Describe the training setting.
         self.describe_configuration(model)
-        # (3) Initialize the training
+        # (3) Initialize the training. MSE seemed to yield better results, less num of concepts explored
         loss_func = torch.nn.MSELoss()
+        # loss_func = torch.nn.CrossEntropyLoss()
+
         optimizer = torch.optim.Adam(model.parameters(), lr=self.args['learning_rate'])
         self.logger.info('Data being labelled')
         # (4) Initialize the mini-batch loader
@@ -114,7 +106,7 @@ class Trainer:
                 # (5.2) Zero the parameter gradients.
                 optimizer.zero_grad()
                 # (5.3) Forward.
-                predictions = model.forward(xpos, xneg)
+                predictions = model.forward(xpos=xpos, xneg=xneg)
                 # (5.4) Compute Loss.
                 batch_loss = loss_func(y, predictions)
                 epoch_loss += batch_loss.item()
@@ -132,6 +124,7 @@ class Trainer:
             if it % self.args['val_at_every_epochs'] == 0:
                 self.validate(model, lp=self.learning_problems, args={'topK': 50})
                 model.train()
+
         training_time = time.time() - start_time
         # Save
         self.logger.info(f'TrainingRunTime {training_time / 60:.3f} minutes')
@@ -162,11 +155,10 @@ class Trainer:
         avg_expression_ncel = np.array([i['NumClassTested'] for i in ncel_results.values()]).mean()
         self.logger.info(
             f'Avg. F-measure NCEL:{avg_f1_ncel}\t Avg. Runtime:{avg_runtime_ncel}\t Avg. Expression Tested:{avg_expression_ncel} in {len(lp)} LPs ')
+        self.logger.info('Validation Ends')
 
-    def start(self) -> NCEL:
-        self.logger.info('Start the training phase')
-        model = self.training_loop()
-
+    def serialize_ncel(self,model):
+        # (2) Serialize model and weights
         embeddings = model.embeddings_to_numpy()
         df = pd.DataFrame(embeddings, index=self.instances)
         df.to_csv(self.storage_path + '/instance_embeddings.csv')
@@ -175,4 +167,11 @@ class Trainer:
             low_emb = PCA(n_components=2).fit_transform(embeddings)
             plt.scatter(low_emb[:, 0], low_emb[:, 1])
             plt.show()
+
+    def start(self) -> NCEL:
+        self.logger.info('Start the training phase')
+        # (1) Training loop
+        model = self.training_loop()
+        self.serialize_ncel(model)
+
         return model

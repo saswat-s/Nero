@@ -11,7 +11,10 @@ class DeepSet(torch.nn.Module):
 
      g(.) is encoder
      f(pool(.)) is decoder
-
+        # (1) Get Embeddings
+        # (2) Apply a pooling operation/ we used sum due to Deepset paper universal approx. theorem
+        # (3)
+        # f( pool ( {g(x1), ... g(xn) }) ), f and g continues funcs, pool sum => universal
     """
 
     def __init__(self, param):
@@ -34,10 +37,6 @@ class DeepSet(torch.nn.Module):
                                            out_features=self.num_outputs))
 
     def forward(self, xpos, xneg):
-        # (1) Get Embeddings
-        # (2) Apply a pooling operation/ we used sum due to Deepset paper universal approx. theorem
-        # (3)
-        # f( pool ( {g(x1), ... g(xn) }) ), f and g continues funcs, pool sum => universal
         xpos_score = self.fc0(torch.sum(self.embeddings(xpos), 1))
         xneg_score = self.fc1(torch.sum(self.embeddings(xneg), 1))
         return torch.sigmoid(xpos_score - xneg_score)
@@ -45,8 +44,15 @@ class DeepSet(torch.nn.Module):
 
 class ST(torch.nn.Module):
     """
-    Permutation invariant Affine Transformation
-    x=[mean(E^+),std(E^+),sum(E^+),mean(E^-),std(E^-),sum(E^-)]
+     f( pool ( {g(x1), ... g(xn) }) ), f and g continues funcs, pool sum => universal
+
+     g(.) is encoder
+     f(pool(.)) is decoder
+        # (1) Get Embeddings
+        # (2) Apply a pooling operation/ we used sum due to Deepset paper universal approx. theorem
+        # (3)
+        # f( pool ( {g(x1), ... g(xn) }) ), f and g continues funcs, pool sum => universal
+
     """
 
     def __init__(self, param):
@@ -60,32 +66,23 @@ class ST(torch.nn.Module):
 
         self.embeddings = torch.nn.Embedding(self.num_instances, self.num_embedding_dim)
         # Like a set wise flattening
-        num_outputs = 1
         self.set_transformer_negative = SetTransformer(dim_input=self.num_embedding_dim,
-                                                       num_outputs=num_outputs,
-                                                       dim_output=self.num_embedding_dim,
-                                                       num_inds=32,
-                                                       dim_hidden=128, num_heads=4, ln=False)
+                                                       num_outputs=self.num_outputs,
+                                                       dim_output=1,
+                                                       num_inds=4, dim_hidden=4,
+                                                       num_heads=4, ln=False)
         self.set_transformer_positive = SetTransformer(dim_input=self.num_embedding_dim,
-                                                       num_outputs=num_outputs,
-                                                       dim_output=self.num_embedding_dim,
-                                                       num_inds=32,
-                                                       dim_hidden=128, num_heads=4, ln=False)
-
-        self.fc0 = nn.Sequential(nn.BatchNorm1d(self.num_embedding_dim + self.num_embedding_dim),
-                                 nn.Linear(in_features=self.num_embedding_dim + self.num_embedding_dim,
-                                           out_features=self.num_outputs))
+                                                       num_outputs=self.num_outputs,
+                                                       dim_output=1,
+                                                       num_inds=4, dim_hidden=4, num_heads=4, ln=False)
 
     def forward(self, xpos, xneg):
         # assert xpos.shape == xneg.shape
         # (1) Get embeddings
-        xpos = self.embeddings(xpos)
-        xneg = self.embeddings(xneg)
-        xpos = torch.squeeze(self.set_transformer_positive(xpos), dim=1)
-        xneg = torch.squeeze(self.set_transformer_negative(xneg), dim=1)
-        x = torch.cat((xpos, xneg), 1)
-        # (3) (BN, LN, ReLU )(x)
-        return torch.sigmoid(self.fc0(x))
+        # {g(x1)}
+        xpos_score = torch.squeeze(self.set_transformer_positive(self.embeddings(xpos)), dim=2)
+        xneg_score = torch.squeeze(self.set_transformer_negative(self.embeddings(xneg)), dim=2)
+        return torch.sigmoid(xpos_score - xneg_score)
 
 
 class MAB(nn.Module):

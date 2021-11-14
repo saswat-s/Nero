@@ -8,28 +8,21 @@ from multiprocessing import Pool
 from typing import List
 import numpy as np
 import itertools
+from owlapy.render import DLSyntaxObjectRenderer
 
 
 class LP:
     def __init__(self, *, e_pos: List[List[int]], e_neg: List[List[int]], instance_idx_mapping,
-                 target_class_expressions,
-                 target_idx_individuals):
-        """
-
-        :param learning_problems: a list of ordered learning problems. Each inner list contains same amounth of positive and negative
-        :param instance_idx_mapping:
-        :param target_class_expressions:
-        :param target_idx_individuals:
-        """
+                 expressions_chain,
+                 target_class_expressions):
         assert len(e_pos) == len(e_neg)
         self.e_pos = e_pos
         self.e_neg = e_neg
         self.num_learning_problems = len(self.e_pos)
         self.instance_idx_mapping = instance_idx_mapping
         self.idx_instance_mapping = dict(zip(instance_idx_mapping.values(),instance_idx_mapping.keys()))
-
+        self.expressions_chain=expressions_chain
         self.target_class_expressions = target_class_expressions
-        self.target_idx_individuals = target_idx_individuals
 
     def __str__(self):
         return f'<LP object at {hex(id(self))}>\tdata_points: {self.num_learning_problems}\t|target_class_expressions|:{len(self.target_class_expressions)}'
@@ -51,13 +44,12 @@ def ClosedWorld_ReasonerFactory(onto: OWLOntology) -> OWLReasoner:
     return reasoner
 
 
-def compute_f1_target(all_targets, pos, neg):
+def compute_f1_target(target_class_expressions, pos, neg):
     res = []
     pos = set(pos)
     neg = set(neg)
-    for target_instances in all_targets:
-        target_instances: target_instances[int]  # containing ordered positive and negative examples
-        res.append(f_measure(instances=set(target_instances), positive_examples=pos, negative_examples=neg))
+    for t in target_class_expressions:
+        res.append(f_measure(instances=t.idx_individuals, positive_examples=pos, negative_examples=neg))
     return res
 
 
@@ -69,7 +61,7 @@ class Dataset(torch.utils.data.Dataset):
 
         with Pool(processes=4) as pool:
             self.Y = list(
-                pool.starmap(compute_f1_target, ((self.lp.target_idx_individuals, pos, neg) for (pos, neg) in
+                pool.starmap(compute_f1_target, ((self.lp.target_class_expressions, pos, neg) for (pos, neg) in
                                                  zip(self.lp.e_pos, self.lp.e_neg))))
 
         self.Xpos = torch.LongTensor(self.lp.e_pos)

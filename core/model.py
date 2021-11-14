@@ -12,15 +12,16 @@ import time
 
 class NCEL:
     def __init__(self, model: torch.nn.Module,
-                 quality_func, target_class_expressions: List[RL_State],
+                 quality_func,
+                 target_class_expressions,
                  instance_idx_mapping: Dict):
         self.model = model
         self.quality_func = quality_func
-        self.target_class_expressions = target_class_expressions
+        self.ordered_target_class_expressions=target_class_expressions
         self.instance_idx_mapping = instance_idx_mapping
         self.renderer = DLSyntaxObjectRenderer()
 
-    def forward(self, xpos, xneg):
+    def forward(self, *,xpos, xneg):
         return self.model(xpos, xneg)
 
     def __intersection_topK(self, results, set_pos, set_neg):
@@ -89,13 +90,13 @@ class NCEL:
                     break
         return extended_results
 
-    def fit(self, pos, neg, topK: int, local_search=False):
+    def fit(self, pos:[str], neg:[str], topK: int, local_search=False):
         start_time = time.time()
         goal_found = False
 
-        xpos = torch.LongTensor([[self.instance_idx_mapping[i] for i in pos]])
-        xneg = torch.LongTensor([[self.instance_idx_mapping[i] for i in neg]])
-        pred = self.forward(xpos, xneg)
+
+        pred = self.forward(xpos=torch.LongTensor([[self.instance_idx_mapping[i] for i in pos]]),
+                            xneg=torch.LongTensor([[self.instance_idx_mapping[i] for i in neg]]))
 
         sort_values, sort_idxs = torch.sort(pred, dim=1, descending=True)
         sort_idxs = sort_idxs.cpu().numpy()[0]
@@ -107,9 +108,9 @@ class NCEL:
         set_neg = set(neg)
         for i in sort_idxs[:topK]:
             s: float = self.quality_func(
-                instances={i.get_iri().as_str() for i in self.target_class_expressions[i].instances},
+                instances=self.ordered_target_class_expressions[i].individuals,
                 positive_examples=set_pos, negative_examples=set_neg)
-            results.append((s, self.target_class_expressions[i]))
+            results.append((s, self.ordered_target_class_expressions[i]))
             if s == 1.0:
                 # print('Goal Found in the tunnelling')
                 goal_found = True
@@ -121,12 +122,12 @@ class NCEL:
             results.extend(extended_results)
 
         num_expression_tested = len(results)
-        results: List[RL_State] = sorted(results, key=lambda x: x[0], reverse=False)
+        results = sorted(results, key=lambda x: x[0], reverse=False)
 
         f1, top_pred = results.pop()
 
-        report = {'Prediction': self.renderer.render(top_pred.concept),
-                  'Instances': {i.get_iri().as_str() for i in top_pred.instances},
+        report = {'Prediction': top_pred.name,
+                  'Instances': top_pred.individuals,
                   'NumClassTested': num_expression_tested,
                   'Runtime': time.time() - start_time,
                   }
