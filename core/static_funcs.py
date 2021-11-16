@@ -29,11 +29,22 @@ class TargetClassExpression:
     def __repr__(self):
         return self.__str__()
 
+    def __mul__(self, other):
+        name = self.name + ' ⊓ ' + other.name
+        individuals = self.individuals.intersection(other.individuals)
+        idx_individuals = self.idx_individuals.intersection(other.idx_individuals)
+        return TargetClassExpression(name, individuals, idx_individuals)
+
+    def __add__(self, other):
+        name = self.name + ' ⊔ ' + other.name
+        individuals = self.individuals.union(other.individuals)
+        idx_individuals = self.idx_individuals.union(other.idx_individuals)
+        return TargetClassExpression(name, individuals, idx_individuals)
+
 
 def save_as_json(*, storage_path=None, obj=None, name=None):
     with open(storage_path + f'/{name}.json', 'w') as file_descriptor:
         json.dump(obj, file_descriptor, indent=3)
-
 
 
 def apply_rho_on_rl_state(rl_state, rho, kb):
@@ -42,8 +53,6 @@ def apply_rho_on_rl_state(rl_state, rho, kb):
         next_rl_state.length = kb.cl(next_rl_state.concept)
         next_rl_state.instances = set(kb.individuals(next_rl_state.concept))
         yield next_rl_state
-
-
 
 
 def generate_target_class_expressions(lpg, kb, args):

@@ -144,9 +144,18 @@ def generate_training_data(kb, args, logger):
     instance_idx_mapping = {individual.get_iri().as_str(): i for i, individual in enumerate(kb.individuals())}
     number_of_target_expressions = args['number_of_target_expressions']
     # (2) Select labels
-    # TODO Add union and intersection
-    target_class_expressions, expressions_chain = select_target_expressions(kb, number_of_target_expressions,
-                                                                            instance_idx_mapping, logger)
+    if args['target_expression_selection'] == 'diverse_target_expression_selection':
+        target_class_expressions, expressions_chain = diverse_target_expression_selection(kb,
+                                                                                          number_of_target_expressions,
+                                                                                          instance_idx_mapping,
+                                                                                          logger)
+    elif args['target_expression_selection'] == 'random_target_expression_selection':
+        target_class_expressions, expressions_chain = random_target_expression_selection(kb,
+                                                                                         number_of_target_expressions,
+                                                                                         instance_idx_mapping,
+                                                                                         logger)
+    else:
+        raise KeyError(f'target_expression_selection:{args["target_expression_selection"]}')
     (e_pos, e_neg) = generate_random_learning_problems(instance_idx_mapping, args)
 
     return {'e_pos': e_pos, 'e_neg': e_neg, 'instance_idx_mapping': instance_idx_mapping,
@@ -154,12 +163,106 @@ def generate_training_data(kb, args, logger):
             'target_class_expressions': target_class_expressions}
 
 
-def select_target_expressions(kb, number_of_target_expressions, instance_idx_mapping, logger) -> Tuple[
+def diverse_target_expression_selection(kb, number_of_target_expressions, instance_idx_mapping, logger) -> Tuple[
     List[TargetClassExpression], Dict]:
     """
     Select Target Expression
     :return:
     """
+    # (1) Preparation
+    renderer = DLSyntaxObjectRenderer()
+    target_class_expressions = set()
+    rl_state = RL_State(kb.thing, parent_node=None, is_root=True)
+    rl_state.length = kb.cl(kb.thing)
+    rl_state.instances = set(kb.individuals(rl_state.concept))
+    # target_class_expressions.add(rl_state)
+    quantifiers = set()
+    rho = LengthBasedRefinement(knowledge_base=kb)
+    target_instance_set = set()
+    expressions_chain = dict()
+    # (2) Refine Top concept
+    for i in apply_rho_on_rl_state(rl_state, rho, kb):
+        # (3) Store a class expression has indv.
+        if len(i.instances) > 0:
+
+            target = TargetClassExpression(name=renderer.render(i.concept),
+                                           individuals=frozenset(_.get_iri().as_str() for _ in i.instances),
+                                           idx_individuals=frozenset(
+                                               instance_idx_mapping[_.get_iri().as_str()] for _ in i.instances)
+                                           )
+
+            if target.individuals not in target_instance_set:
+                target_class_expressions.add(target)
+                target_instance_set.add(target.individuals)
+                expressions_chain[target.name] = [renderer.render(x.concept) for x in retrieve_concept_chain(i)]
+
+            # (4) Store for later refinement if concept is \forall or \exists
+            if isinstance(i.concept, OWLObjectAllValuesFrom) or isinstance(i.concept, OWLObjectSomeValuesFrom):
+                quantifiers.add(i)
+            if len(target_class_expressions) == number_of_target_expressions:
+                logger.info(f'{number_of_target_expressions} target expressions generated')
+                break
+    logger.info(f'{len(target_class_expressions)} is created as a result of refining the top concept.')
+
+    # (5) Refine
+    if len(target_class_expressions) < number_of_target_expressions:
+        for selected_states in quantifiers:
+            if len(target_class_expressions) == number_of_target_expressions:
+                break
+            for ref_selected_states in apply_rho_on_rl_state(selected_states, rho, kb):
+                if len(ref_selected_states.instances) > 0:
+                    if len(target_class_expressions) == number_of_target_expressions:
+                        break
+
+                    target = TargetClassExpression(name=renderer.render(ref_selected_states.concept),
+                                                   individuals=frozenset(
+                                                       _.get_iri().as_str() for _ in ref_selected_states.instances),
+                                                   idx_individuals=frozenset(
+                                                       instance_idx_mapping[_.get_iri().as_str()] for _ in
+                                                       ref_selected_states.instances)
+                                                   )
+
+                    if target.individuals not in target_instance_set:
+                        target_class_expressions.add(target)
+                        target_instance_set.add(target.individuals)
+                        expressions_chain[target.name] = [renderer.render(x.concept) for x in
+                                                          retrieve_concept_chain(ref_selected_states)]
+    while len(target_class_expressions) < number_of_target_expressions:
+        logger.info(
+            f'{len(target_class_expressions)} is created as a result of refining the top concept and quantifiers.')
+        res = set()
+        for i in target_class_expressions:
+            for j in target_class_expressions:
+                if i == j:
+                    continue
+                i_and_j = i * j
+                i_or_j = i + j
+
+                if i_and_j.individuals not in target_instance_set:
+                    res.add(i_and_j)
+                    target_instance_set.add(i_and_j.individuals)
+                    expressions_chain[i_and_j.name] = expressions_chain[i.name] + [i.name]
+                if i_or_j.individuals not in target_instance_set:
+                    res.add(i_or_j)
+                    target_instance_set.add(i_or_j.individuals)
+                    expressions_chain[i_or_j.name] = expressions_chain[i.name] + [i.name]
+                if len(target_class_expressions) + len(res) == number_of_target_expressions:
+                    break
+        target_class_expressions.update(res)
+
+        if len(target_class_expressions) == number_of_target_expressions:
+            break
+
+    return list(target_class_expressions), expressions_chain
+
+
+def random_target_expression_selection(kb, number_of_target_expressions, instance_idx_mapping, logger) -> Tuple[
+    List[TargetClassExpression], Dict]:
+    """
+    Select Target Expression
+    :return:
+    """
+    # @TODO followed same method of not using RL_State as done in entropy_based_target_expression_selection
     # (1) Preparation
     renderer = DLSyntaxObjectRenderer()
     target_class_expressions = set()

@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from typing import Dict, List
+from typing import Dict, List, Iterable
 from ontolearn.search import RL_State
 from owlapy.render import DLSyntaxObjectRenderer
 from owlapy.model import OWLClass, OWLObjectComplementOf, OWLObjectSomeValuesFrom, OWLObjectAllValuesFrom, \
@@ -17,11 +17,19 @@ class NCEL:
                  instance_idx_mapping: Dict):
         self.model = model
         self.quality_func = quality_func
-        self.ordered_target_class_expressions=target_class_expressions
+        self.ordered_target_class_expressions = target_class_expressions
         self.instance_idx_mapping = instance_idx_mapping
         self.renderer = DLSyntaxObjectRenderer()
 
-    def forward(self, *,xpos, xneg):
+    def forward(self, *, xpos, xneg):
+        return self.model(xpos, xneg)
+
+    def positive_embeddings_from_iterable_of_individuals(self, pos: Iterable[str]):
+        pred = self.forward(xpos=torch.LongTensor([[self.instance_idx_mapping[i] for i in pos]]),
+                            xneg=torch.LongTensor([[self.instance_idx_mapping[i] for i in neg]]))
+        return self.model(xpos, xneg)
+
+    def negative_embeddings(self, xpos):
         return self.model(xpos, xneg)
 
     def __intersection_topK(self, results, set_pos, set_neg):
@@ -90,10 +98,9 @@ class NCEL:
                     break
         return extended_results
 
-    def fit(self, pos:[str], neg:[str], topK: int, local_search=False):
+    def fit(self, pos: [str], neg: [str], topK: int, local_search=False):
         start_time = time.time()
         goal_found = False
-
 
         pred = self.forward(xpos=torch.LongTensor([[self.instance_idx_mapping[i] for i in pos]]),
                             xneg=torch.LongTensor([[self.instance_idx_mapping[i] for i in neg]]))

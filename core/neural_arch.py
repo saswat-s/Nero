@@ -41,6 +41,12 @@ class DeepSet(torch.nn.Module):
         xneg_score = self.fc1(torch.sum(self.embeddings(xneg), 1))
         return torch.sigmoid(xpos_score - xneg_score)
 
+    def get_pos_embeddings(self, xpos):
+        return self.fc0(torch.sum(self.embeddings(xpos), 1))
+
+    def get_neg_embeddings(self):
+        return self.fc1(torch.sum(self.embeddings(xneg), 1))
+
 
 class ST(torch.nn.Module):
     """
@@ -83,6 +89,12 @@ class ST(torch.nn.Module):
         xpos_score = torch.squeeze(self.set_transformer_positive(self.embeddings(xpos)), dim=2)
         xneg_score = torch.squeeze(self.set_transformer_negative(self.embeddings(xneg)), dim=2)
         return torch.sigmoid(xpos_score - xneg_score)
+
+    def get_pos_embeddings(self, xpos):
+        return torch.squeeze(self.set_transformer_positive(self.embeddings(xpos)), dim=2)
+
+    def get_neg_embeddings(self):
+        return torch.squeeze(self.set_transformer_negative(self.embeddings(xneg)), dim=2)
 
 
 class MAB(nn.Module):
