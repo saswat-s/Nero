@@ -13,7 +13,6 @@ from owlapy.render import DLSyntaxObjectRenderer
 
 class LP:
     def __init__(self, *, e_pos: List[List[int]], e_neg: List[List[int]], instance_idx_mapping,
-                 expressions_chain,
                  target_class_expressions):
         assert len(e_pos) == len(e_neg)
         self.e_pos = e_pos
@@ -21,7 +20,6 @@ class LP:
         self.num_learning_problems = len(self.e_pos)
         self.instance_idx_mapping = instance_idx_mapping
         self.idx_instance_mapping = dict(zip(instance_idx_mapping.values(),instance_idx_mapping.keys()))
-        self.expressions_chain=expressions_chain
         self.target_class_expressions = target_class_expressions
 
     def __str__(self):

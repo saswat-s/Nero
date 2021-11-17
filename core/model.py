@@ -17,7 +17,7 @@ class NCEL:
                  instance_idx_mapping: Dict):
         self.model = model
         self.quality_func = quality_func
-        self.ordered_target_class_expressions = target_class_expressions
+        self.target_class_expressions = target_class_expressions
         self.instance_idx_mapping = instance_idx_mapping
         self.renderer = DLSyntaxObjectRenderer()
 
@@ -98,12 +98,27 @@ class NCEL:
                     break
         return extended_results
 
-    def fit(self, pos: [str], neg: [str], topK: int, local_search=False):
+    def fit(self, pos: [str], neg: [str], topK: int, local_search=False) -> Dict:
+        try:
+            assert topK > 0
+        except AssertionError:
+            print(f'topK must be greater than 0. Currently:{topK}')
         start_time = time.time()
         goal_found = False
-
-        pred = self.forward(xpos=torch.LongTensor([[self.instance_idx_mapping[i] for i in pos]]),
-                            xneg=torch.LongTensor([[self.instance_idx_mapping[i] for i in neg]]))
+        try:
+            idx_pos = [self.instance_idx_mapping[i] for i in pos]
+        except KeyError:
+            print('Ensure that Positive examples can be found in the input KG')
+            print(pos)
+            exit(1)
+        try:
+            idx_neg = [self.instance_idx_mapping[i] for i in neg]
+        except KeyError:
+            print('Ensure that Positive examples can be found in the input KG')
+            print(neg)
+            exit(1)
+        pred = self.forward(xpos=torch.LongTensor([idx_pos]),
+                            xneg=torch.LongTensor([idx_neg]))
 
         sort_values, sort_idxs = torch.sort(pred, dim=1, descending=True)
         sort_idxs = sort_idxs.cpu().numpy()[0]
@@ -115,9 +130,9 @@ class NCEL:
         set_neg = set(neg)
         for i in sort_idxs[:topK]:
             s: float = self.quality_func(
-                instances=self.ordered_target_class_expressions[i].individuals,
+                instances=self.target_class_expressions[i].individuals,
                 positive_examples=set_pos, negative_examples=set_neg)
-            results.append((s, self.ordered_target_class_expressions[i]))
+            results.append((s, self.target_class_expressions[i]))
             if s == 1.0:
                 # print('Goal Found in the tunnelling')
                 goal_found = True
@@ -129,17 +144,56 @@ class NCEL:
             results.extend(extended_results)
 
         num_expression_tested = len(results)
-        results = sorted(results, key=lambda x: x[0], reverse=False)
-
-        f1, top_pred = results.pop()
+        results = sorted(results, key=lambda x: x[0], reverse=True)
+        f1, top_pred = results[0]
 
         report = {'Prediction': top_pred.name,
                   'Instances': top_pred.individuals,
+                  'F1-Score': f1,
                   'NumClassTested': num_expression_tested,
                   'Runtime': time.time() - start_time,
                   }
 
         return report
+
+    def predict(self, pos: [str], neg: [str], topK: int, local_search=False) -> List:
+        try:
+            assert topK > 0
+        except AssertionError:
+            print(f'topK must be greater than 0. Currently:{topK}')
+        goal_found = False
+        try:
+            idx_pos = [self.instance_idx_mapping[i] for i in pos]
+        except KeyError:
+            print('Ensure that Positive examples can be found in the input KG')
+            print(pos)
+            exit(1)
+        try:
+            idx_neg = [self.instance_idx_mapping[i] for i in neg]
+        except KeyError:
+            print('Ensure that Positive examples can be found in the input KG')
+            print(neg)
+            exit(1)
+        pred = self.forward(xpos=torch.LongTensor([idx_pos]),
+                            xneg=torch.LongTensor([idx_neg]))
+
+        sort_values, sort_idxs = torch.sort(pred, dim=1, descending=True)
+        sort_idxs = sort_idxs.cpu().numpy()[0]
+
+        results = []
+        # We could apply multi_processing here
+        # Explore only top K class expressions that have received highest K scores
+        set_pos = set(pos)
+        set_neg = set(neg)
+        for i in sort_idxs[:topK]:
+            s: float = self.quality_func(
+                instances=self.target_class_expressions[i].individuals,
+                positive_examples=set_pos, negative_examples=set_neg)
+            results.append((s, self.target_class_expressions[i]))
+            if s == 1.0:
+                break
+
+        return sorted(results, key=lambda x: x[0], reverse=True)
 
     def __str__(self):
         return f'NCEL with {self.model.name}'

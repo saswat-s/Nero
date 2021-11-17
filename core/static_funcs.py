@@ -17,10 +17,18 @@ from random import randint
 
 
 class TargetClassExpression:
-    def __init__(self, name: str, individuals: Set, idx_individuals: Set):
+    def __init__(self, *, label_id: int, name: str, individuals: Set, idx_individuals: Set, expression_chain: List):
+        assert isinstance(label_id, int)
+        assert isinstance(name, str)
+        assert isinstance(individuals, frozenset)
+        assert isinstance(idx_individuals, frozenset)
+        assert isinstance(expression_chain, list)
+
+        self.label_id = label_id
         self.name = name
         self.individuals = individuals
         self.idx_individuals = idx_individuals
+        self.expression_chain = expression_chain
         assert len(self.individuals) == len(self.idx_individuals)
 
     def __str__(self):
@@ -30,16 +38,19 @@ class TargetClassExpression:
         return self.__str__()
 
     def __mul__(self, other):
-        name = self.name + ' ⊓ ' + other.name
-        individuals = self.individuals.intersection(other.individuals)
-        idx_individuals = self.idx_individuals.intersection(other.idx_individuals)
-        return TargetClassExpression(name, individuals, idx_individuals)
+        return TargetClassExpression(
+            label_id=-1,
+            name=self.name + ' ⊓ ' + other.name,
+            individuals=self.individuals.intersection(other.individuals),
+            idx_individuals=self.idx_individuals.intersection(other.idx_individuals),
+            expression_chain=self.expression_chain + [other.name])
 
     def __add__(self, other):
-        name = self.name + ' ⊔ ' + other.name
-        individuals = self.individuals.union(other.individuals)
-        idx_individuals = self.idx_individuals.union(other.idx_individuals)
-        return TargetClassExpression(name, individuals, idx_individuals)
+        return TargetClassExpression(
+            label_id=-2,
+            name=self.name + ' ⊔ ' + other.name, individuals=self.individuals.union(other.individuals),
+            idx_individuals=self.idx_individuals.union(other.idx_individuals),
+            expression_chain=self.expression_chain + [other.name])
 
 
 def save_as_json(*, storage_path=None, obj=None, name=None):

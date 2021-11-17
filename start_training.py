@@ -63,12 +63,12 @@ if __name__ == '__main__':
     parser.add_argument("--num_embedding_dim", type=int, default=25, help='Number of embedding dimensions.')
     # Training Related
     parser.add_argument("--learning_rate", type=int, default=.001, help='Learning Rate')
-    parser.add_argument("--num_epochs", type=int, default=1000, help='Number of iterations over the entire dataset.')
+    parser.add_argument("--num_epochs", type=int, default=100, help='Number of iterations over the entire dataset.')
     parser.add_argument("--val_at_every_epochs", type=int, default=25, help='How often eval.')
 
     parser.add_argument("--batch_size", type=int, default=32)
     # Inference Related
-    parser.add_argument("--topK", type=int, default=1_000_000,
+    parser.add_argument("--topK", type=int, default=10_000,
                         help='Test the highest topK target expressions')
 
     # Analysis Related
