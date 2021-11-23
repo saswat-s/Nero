@@ -36,15 +36,23 @@ class Experiment:
         self.logger.info('Knowledge Base being Initialized')
         kb = KnowledgeBase(path=self.args['path_knowledge_base'],
                            reasoner_factory=ClosedWorld_ReasonerFactory)
+        self.logger.info(kb)
         self.args['num_instances'] = kb.individuals_count()
         self.args['num_named_classes'] = len([i for i in kb.ontology().classes_in_signature()])
 
         # (3) Initialize Learning problems
         self.logger.info('Learning Problems being generated')
-        self.lp = LP(**generate_training_data(kb, self.args, logger=self.logger))
-        del kb
+        e_pos, e_neg, instance_idx_mapping, target_class_expressions = generate_training_data(kb, self.args,
+                                                                                              logger=self.logger)
+
+        self.lp = LP(e_pos=e_pos, e_neg=e_neg, instance_idx_mapping=instance_idx_mapping,
+                     target_class_expressions=target_class_expressions)
+        # Delete the pointers :)
+        del kb, e_pos, e_neg, instance_idx_mapping, target_class_expressions
+        self.logger.info(self.lp)
         # (4) Init Trainer
         self.trainer = Trainer(learning_problems=self.lp, args=self.args, logger=self.logger)
+        self.logger.info(self.trainer)
 
         self.instance_str = list(self.lp.instance_idx_mapping.keys())
         self.__describe_and_store()
@@ -87,16 +95,16 @@ class Experiment:
         )
 
     def start(self):
+        # (1) Train model
         self.logger.info('Experiment starts')
-        # (1) Train NCEL
         ncel = self.trainer.start()
 
+        # (2) Load learning problems
         with open(self.args['path_lp']) as json_file:
             settings = json.load(json_file)
-        lp = [(list(v['positive_examples']), list(v['negative_examples'])) for k, v in
-              settings['problems'].items()]
+        lp = [(list(v['positive_examples']), list(v['negative_examples'])) for k, v in settings['problems'].items()]
 
-        # (2) Evaluate NCEL
+        # (2) Evaluate model
         self.evaluate(ncel, lp, self.args)
 
     def evaluate(self, ncel, lp, args):
@@ -104,7 +112,7 @@ class Experiment:
 
         ncel_results = dict()
         celoe_results = dict()
-
+        # (1) Iterate over input learning problems.
         for _, (p, n) in enumerate(lp):
             ncel_report = ncel.fit(pos=p, neg=n, topK=args['topK'], local_search=False)
             ncel_report.update({'P': p, 'N': n, 'F-measure': f_measure(instances=ncel_report['Instances'],
@@ -148,6 +156,7 @@ def generate_training_data(kb, args, logger):
     """
     # (1) Individual to integer mapping
     instance_idx_mapping = {individual.get_iri().as_str(): i for i, individual in enumerate(kb.individuals())}
+    logger.info(f'Number of instances: {len(instance_idx_mapping)}')
     number_of_target_expressions = args['number_of_target_expressions']
     # (2) Select labels
     if args['target_expression_selection'] == 'diverse_target_expression_selection':
@@ -162,10 +171,18 @@ def generate_training_data(kb, args, logger):
                                                                       logger)
     else:
         raise KeyError(f'target_expression_selection:{args["target_expression_selection"]}')
+
+    logger.info(f'Number of created target expressions: {len(target_class_expressions)}')
+
     (e_pos, e_neg) = generate_random_learning_problems(instance_idx_mapping, args)
 
-    return {'e_pos': e_pos, 'e_neg': e_neg, 'instance_idx_mapping': instance_idx_mapping,
-            'target_class_expressions': target_class_expressions}
+    assert len(e_pos) == len(e_neg)
+
+    logger.info(f'Number of generated learning problems : {len(e_pos)}')
+
+    return e_pos, e_neg, instance_idx_mapping, target_class_expressions
+    # return {'e_pos': e_pos, 'e_neg': e_neg, 'instance_idx_mapping': instance_idx_mapping,
+    #        'target_class_expressions': target_class_expressions}
 
 
 def diverse_target_expression_selection(kb, number_of_target_expressions, instance_idx_mapping, logger) -> Tuple[

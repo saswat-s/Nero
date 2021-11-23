@@ -20,11 +20,13 @@ class NCEL:
         self.target_class_expressions = target_class_expressions
         self.instance_idx_mapping = instance_idx_mapping
         self.renderer = DLSyntaxObjectRenderer()
+        self.max_top_k = len(self.target_class_expressions)
 
     def forward(self, *, xpos, xneg):
         return self.model(xpos, xneg)
 
     def positive_embeddings_from_iterable_of_individuals(self, pos: Iterable[str]):
+        raise NotImplementedError()
         pred = self.forward(xpos=torch.LongTensor([[self.instance_idx_mapping[i] for i in pos]]),
                             xneg=torch.LongTensor([[self.instance_idx_mapping[i] for i in neg]]))
         return self.model(xpos, xneg)
@@ -156,22 +158,32 @@ class NCEL:
 
         return report
 
-    def predict(self, pos: [str], neg: [str], topK: int, local_search=False) -> List:
-        try:
-            assert topK > 0
-        except AssertionError:
-            print(f'topK must be greater than 0. Currently:{topK}')
-        goal_found = False
+    def __predict_sanity_checking(self, pos: [str], neg: [str], topK: int = None, local_search=False):
+        if topK is None:
+            topK = self.max_top_k
+        elif isinstance(topK, int) or isinstance(topK, flat):
+            try:
+                assert topK > 0
+                topK = int(round(topK))
+            except AssertionError:
+                print(f'topK must be greater than 0. Currently:{topK}')
+                topK = self.max_top_k
+
+        assert len(pos) > 0
+        assert len(neg) > 0
+
+    def predict(self, pos: [str], neg: [str], topK: int = None, local_search=False) -> List:
+        start_time = time.time()
+        self.__predict_sanity_checking(pos=pos, neg=neg, topK=topK, local_search=local_search)
+
+        idx_pos = []
+        idx_neg = []
         try:
             idx_pos = [self.instance_idx_mapping[i] for i in pos]
-        except KeyError:
-            print('Ensure that Positive examples can be found in the input KG')
-            print(pos)
-            exit(1)
-        try:
             idx_neg = [self.instance_idx_mapping[i] for i in neg]
         except KeyError:
-            print('Ensure that Positive examples can be found in the input KG')
+            print('Ensure that URIs are valid and can be found in the input KG')
+            print(pos)
             print(neg)
             exit(1)
         pred = self.forward(xpos=torch.LongTensor([idx_pos]),
@@ -191,9 +203,10 @@ class NCEL:
                 positive_examples=set_pos, negative_examples=set_neg)
             results.append((s, self.target_class_expressions[i]))
             if s == 1.0:
+                # if goal found break it.
                 break
 
-        return sorted(results, key=lambda x: x[0], reverse=True)
+        return sorted(results, key=lambda x: x[0], reverse=True), time.time() - start_time
 
     def __str__(self):
         return f'NCEL with {self.model.name}'

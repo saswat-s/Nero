@@ -47,7 +47,6 @@ class DeepSet(torch.nn.Module):
     def get_neg_embeddings(self):
         return self.fc1(torch.sum(self.embeddings(xneg), 1))
 
-
 class ST(torch.nn.Module):
     """
      f( pool ( {g(x1), ... g(xn) }) ), f and g continues funcs, pool sum => universal

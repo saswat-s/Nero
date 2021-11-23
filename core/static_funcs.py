@@ -40,7 +40,7 @@ class TargetClassExpression:
     def __mul__(self, other):
         return TargetClassExpression(
             label_id=-1,
-            name=self.name + ' ⊓ ' + other.name,
+            name=f'({self.name}) ⊓ ({other.name})',
             individuals=self.individuals.intersection(other.individuals),
             idx_individuals=self.idx_individuals.intersection(other.idx_individuals),
             expression_chain=self.expression_chain + [other.name])
@@ -48,7 +48,8 @@ class TargetClassExpression:
     def __add__(self, other):
         return TargetClassExpression(
             label_id=-2,
-            name=self.name + ' ⊔ ' + other.name, individuals=self.individuals.union(other.individuals),
+            name=f'({self.name}) ⊔ ({other.name})',
+            individuals=self.individuals.union(other.individuals),
             idx_individuals=self.idx_individuals.union(other.idx_individuals),
             expression_chain=self.expression_chain + [other.name])
 

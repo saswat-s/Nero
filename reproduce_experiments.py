@@ -4,11 +4,12 @@ Deploy our approach
 from typing import Dict
 import torch
 import json
-import gradio as gr
 from core import NCEL, DeepSet, ST, TargetClassExpression, f_measure
 from random import randint
 from argparse import ArgumentParser
 import random
+import numpy as np
+
 
 def load_target_class_expressions_and_instance_idx_mapping(args):
     """
@@ -18,7 +19,7 @@ def load_target_class_expressions_and_instance_idx_mapping(args):
     """
     # target_class_expressions Must be empty and must be filled in an exactorder
     target_class_expressions = []
-    with open(args['path_of_experiments'] + '/target_class_expressions.json', 'r') as f:
+    with open(args['path_of_experiment_folder'] + '/target_class_expressions.json', 'r') as f:
         for k, v in json.load(f).items():
             k: str  # k denotes k.th label of target expression, json loading type conversion from int to str appreantly
             v: dict  # v contains info for Target Class Expression Object
@@ -49,7 +50,7 @@ def load_target_class_expressions_and_instance_idx_mapping(args):
             target_class_expressions.append(t)
 
     instance_idx_mapping = dict()
-    with open(args['path_of_experiments'] + '/instance_idx_mapping.json', 'r') as f:
+    with open(args['path_of_experiment_folder'] + '/instance_idx_mapping.json', 'r') as f:
         instance_idx_mapping.update(json.load(f))
 
     return target_class_expressions, instance_idx_mapping
@@ -58,7 +59,7 @@ def load_target_class_expressions_and_instance_idx_mapping(args):
 def load_pytorch_module(args: Dict) -> torch.nn.Module:
     """ Load weights and initialize pytorch module"""
     # (1) Load weights from experiment repo
-    weights = torch.load(args['path_of_experiments'] + '/final_model.pt', torch.device('cpu'))
+    weights = torch.load(args['path_of_experiment_folder'] + '/final_model.pt', torch.device('cpu'))
     if args['neural_architecture'] == 'DeepSet':
         model = DeepSet(args)
     elif args['neural_architecture'] == 'ST':
@@ -85,53 +86,47 @@ def load_ncel(args: Dict) -> NCEL:
     model.eval()
     return model
 
-def launch_service(ncel_model):
-    def predict(positive_examples, negative_examples, random_examples: bool):
-        if random_examples:
-            # Either sample from here self.instance_idx_mapping
-            # or sample from targets
-            pos = ncel_model.target_class_expressions[randint(0, len(ncel_model.target_class_expressions))].individuals
-            neg = random.sample(list(ncel_model.instance_idx_mapping.keys()), len(pos))
-        else:
-            pos = positive_examples.split(",")
-            neg = negative_examples.split(",")
 
-        with torch.no_grad():
-            results = ncel_model.predict(pos=pos, neg=neg)
+def predict(model, positive_examples, negative_examples):
+    with torch.no_grad():
+        return model.predict(pos=positive_examples, neg=negative_examples)
 
-        s = f' |E^+|{len(pos)},|E^+|{len(neg)}\n'
-        for ith, (f1, target_concept) in enumerate(results[:10]):
-            s += f'{ith + 1}. {target_concept.name}\t F1-score:{f1:.2f}\n'
-        return s
-
-    gr.Interface(
-        fn=predict,
-        inputs=[gr.inputs.Textbox(lines=5, placeholder=None, label=None),
-                gr.inputs.Textbox(lines=5, placeholder=None, label=None),
-                #gr.inputs.Slider(minimum=10, maximum=1000),
-                "checkbox"],
-        outputs=[gr.outputs.Textbox(label='Class Expression Learning')]
-    ).launch()
 
 def run(settings):
-    with open(settings['path_of_experiments'] + '/settings.json', 'r') as f:
+    # (1) Load the configuration setting.
+    with open(settings['path_of_experiment_folder'] + '/settings.json', 'r') as f:
         settings.update(json.load(f))
 
-    # (2) Load the Pytorch Module
+    # (2) Load the Pytorch Module.
     ncel_model = load_ncel(settings)
 
-    launch_service(ncel_model)
+    # (3) Load Learning Problems
+    lp = dict()
+    with open(settings['path_of_json_learning_problems'], 'r') as f:
+        lp.update(json.load(f))
+    quality = []
+    runtimes = []
 
+    for target_str_name, v in lp['problems'].items():
+        results, rt = ncel_model.predict(pos=v['positive_examples'], neg=v['negative_examples'], topK=settings['topK'])
 
+        f1, target_concept = results[0]
+        runtimes.append(rt)
+        quality.append(f1)
+
+    quality = np.array(quality)
+    runtimes = np.array(runtimes)
+    print(f'F-measure:{quality.mean():.3f} +- {quality.std():.3f} \t Runtimes: {runtimes.mean():.3f} +- {runtimes.std():.3f} in {len(lp["problems"])} learning problems')
 
 if __name__ == '__main__':
     parser = ArgumentParser()
     # General
-    parser.add_argument("--path_of_experiments", type=str,
-                        default='Experiments/2021-11-17 18:00:28.803967')
+    parser.add_argument("--path_of_experiment_folder", type=str,
+                        default='/home/demir/Desktop/Softwares/DeepTunnellingForRefinementOperators/PretrainedModels/Family/2021-11-17 18:00:28.803967')
+    parser.add_argument("--path_of_json_learning_problems", type=str,
+                        default='/home/demir/Desktop/Softwares/DeepTunnellingForRefinementOperators/LPs/Family/lp_dl_learner.json')
     # Inference Related
-    parser.add_argument("--topK", type=int, default=1000,
+    parser.add_argument("--topK", type=int, default=None,
                         help='Test the highest topK target expressions')
 
-    settings = vars(parser.parse_args())
-    run(settings)
+    run(vars(parser.parse_args()))

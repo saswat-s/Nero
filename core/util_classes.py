@@ -19,7 +19,7 @@ class LP:
         self.e_neg = e_neg
         self.num_learning_problems = len(self.e_pos)
         self.instance_idx_mapping = instance_idx_mapping
-        self.idx_instance_mapping = dict(zip(instance_idx_mapping.values(),instance_idx_mapping.keys()))
+        self.idx_instance_mapping = dict(zip(instance_idx_mapping.values(), instance_idx_mapping.keys()))
         self.target_class_expressions = target_class_expressions
 
     def __str__(self):
@@ -43,12 +43,9 @@ def ClosedWorld_ReasonerFactory(onto: OWLOntology) -> OWLReasoner:
 
 
 def compute_f1_target(target_class_expressions, pos, neg):
-    res = []
     pos = set(pos)
     neg = set(neg)
-    for t in target_class_expressions:
-        res.append(f_measure(instances=t.idx_individuals, positive_examples=pos, negative_examples=neg))
-    return res
+    return [f_measure(instances=t.idx_individuals, positive_examples=pos, negative_examples=neg) for t in target_class_expressions]
 
 
 class Dataset(torch.utils.data.Dataset):
@@ -56,7 +53,7 @@ class Dataset(torch.utils.data.Dataset):
         self.lp = lp
         self.num_data_points = len(self.lp)
         self.Y = []
-
+        # This is quite memory expensive.
         with Pool(processes=4) as pool:
             self.Y = list(
                 pool.starmap(compute_f1_target, ((self.lp.target_class_expressions, pos, neg) for (pos, neg) in
@@ -71,3 +68,18 @@ class Dataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         return self.Xpos[idx], self.Xneg[idx], self.Y[idx]
+
+
+class DatasetWithOnFlyLabelling(torch.utils.data.Dataset):
+    def __init__(self, lp: LP):
+        self.lp = lp
+        self.num_data_points = len(self.lp)
+
+    def __len__(self):
+        return self.num_data_points
+
+    def __getitem__(self, idx):
+        # We save memory but not runtime ?!
+        pos_idx, neg_idx = self.lp.e_pos[idx], self.lp.e_neg[idx]
+        f1 = compute_f1_target(self.lp.target_class_expressions, pos_idx, neg_idx)
+        return torch.LongTensor(pos_idx), torch.LongTensor(neg_idx), torch.FloatTensor(f1)

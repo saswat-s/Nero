@@ -36,10 +36,10 @@ if __name__ == '__main__':
     parser.add_argument("--path_lp", type=str, default='LPs/Family/lp_dl_learner.json',
                         help='If None, examples are randomly generated')
     parser.add_argument("--dl_learner_binary_path", type=str, default='dllearner-1.4.0/')
-    parser.add_argument('--num_workers', type=int, default=4, help='Number of cpus used during batching')
+    parser.add_argument('--num_workers', type=int, default=0, help='Number of cpus used during batching')
 
     # Class Expression Learning
-    parser.add_argument("--num_individual_per_example", type=int, default=10,
+    parser.add_argument("--num_individual_per_example", type=int, default=20,
                         help='Input set size for expression learning.')
     parser.add_argument("--num_of_learning_problems_training", type=int, default=200,
                         help='Total number of randomly generated learning problems for training.')
@@ -52,7 +52,7 @@ if __name__ == '__main__':
                         help='[ST(Set Transformer),DeepSet]')
 
     parser.add_argument("--number_of_target_expressions", type=int,
-                        default=50_000,
+                        default=1000,
                         help='Randomly select target class expressions as labels.')
 
     parser.add_argument("--target_expression_selection", type=str,
@@ -60,15 +60,15 @@ if __name__ == '__main__':
                         help='[diverse_target_expression_selection, random_target_expression_selection]')
 
     # Hyperparameters of Neural Class Expression
-    parser.add_argument("--num_embedding_dim", type=int, default=25, help='Number of embedding dimensions.')
+    parser.add_argument("--num_embedding_dim", type=int, default=10, help='Number of embedding dimensions.')
     # Training Related
     parser.add_argument("--learning_rate", type=int, default=.001, help='Learning Rate')
-    parser.add_argument("--num_epochs", type=int, default=100, help='Number of iterations over the entire dataset.')
+    parser.add_argument("--num_epochs", type=int, default=500, help='Number of iterations over the entire dataset.')
     parser.add_argument("--val_at_every_epochs", type=int, default=25, help='How often eval.')
 
-    parser.add_argument("--batch_size", type=int, default=32)
+    parser.add_argument("--batch_size", type=int, default=1024)
     # Inference Related
-    parser.add_argument("--topK", type=int, default=10_000,
+    parser.add_argument("--topK", type=int, default=10,
                         help='Test the highest topK target expressions')
 
     # Analysis Related

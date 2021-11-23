@@ -30,3 +30,6 @@ unzip KGs.zip
 unzip pre_trained_agents.zip
 unzip LPs.zip
 ```
+
+# Deployment
+Generate Random Learning Problems and Infer OWL Class Expressions 

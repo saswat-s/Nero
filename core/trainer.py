@@ -58,10 +58,12 @@ class Trainer:
         arc = self.args['neural_architecture']
         if arc == 'DeepSet':
             model = DeepSet(param)
+        elif arc == 'DeepSetBase':
+            model = DeepSetBase(param)
         elif arc == 'ST':
             model = ST(param)
         else:
-            raise NotImplementedError('There is no other model')
+            raise NotImplementedError(f'There is no {arc} model implemented')
 
         return NCEL(model=model,
                     quality_func=f_measure,
@@ -81,6 +83,11 @@ class Trainer:
         optimizer = torch.optim.Adam(model.parameters(), lr=self.args['learning_rate'])
         self.logger.info('Data being labelled')
         # (4) Initialize the mini-batch loader
+        """
+        data_loader = torch.utils.data.DataLoader(DatasetWithOnFlyLabelling(self.learning_problems),
+                                                  batch_size=self.args['batch_size'],
+                                                  num_workers=self.args['num_workers'], shuffle=True)
+        """
         data_loader = torch.utils.data.DataLoader(Dataset(self.learning_problems),
                                                   batch_size=self.args['batch_size'],
                                                   num_workers=self.args['num_workers'], shuffle=True)
@@ -102,7 +109,6 @@ class Trainer:
             for xpos, xneg, y in data_loader:
                 # (5.1) Send the batch into device.
                 xpos, xneg, y = xpos.to(self.device), xneg.to(self.device), y.to(self.device)
-
                 # (5.2) Zero the parameter gradients.
                 optimizer.zero_grad()
                 # (5.3) Forward.
@@ -116,13 +122,12 @@ class Trainer:
                 optimizer.step()
             # (6) Store epoch loss
             losses.append(epoch_loss)
-
             # (7) Print-out
             if it % printout_constant == 0:
                 self.logger.info(f'{it}.th epoch loss: {epoch_loss}')
 
             if it % self.args['val_at_every_epochs'] == 0:
-                self.validate(model, lp=self.learning_problems, args={'topK': 50})
+                self.validate(model, lp=self.learning_problems, args={'topK': 100})
                 model.train()
 
         training_time = time.time() - start_time
