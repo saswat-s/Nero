@@ -84,10 +84,14 @@ class Trainer:
         self.logger.info('Data being labelled')
         # (4) Initialize the mini-batch loader
         """
+        # DatasetWithOnFlyLabelling uses less memory but takes too much time although all cpus are used
         data_loader = torch.utils.data.DataLoader(DatasetWithOnFlyLabelling(self.learning_problems),
                                                   batch_size=self.args['batch_size'],
                                                   num_workers=self.args['num_workers'], shuffle=True)
+        
         """
+
+
         data_loader = torch.utils.data.DataLoader(Dataset(self.learning_problems),
                                                   batch_size=self.args['batch_size'],
                                                   num_workers=self.args['num_workers'], shuffle=True)

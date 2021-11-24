@@ -101,10 +101,13 @@ class NCEL:
         return extended_results
 
     def fit(self, pos: [str], neg: [str], topK: int, local_search=False) -> Dict:
+        if topK is None:
+            topK=self.max_top_k
         try:
             assert topK > 0
         except AssertionError:
             print(f'topK must be greater than 0. Currently:{topK}')
+            topK=self.max_top_k
         start_time = time.time()
         goal_found = False
         try:
