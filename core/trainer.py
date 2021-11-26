@@ -90,12 +90,6 @@ class Trainer:
                                                   num_workers=self.args['num_workers'], shuffle=True)
         
         """
-
-
-        data_loader = torch.utils.data.DataLoader(Dataset(self.learning_problems),
-                                                  batch_size=self.args['batch_size'],
-                                                  num_workers=self.args['num_workers'], shuffle=True)
-
         self.logger.info('Training starts')
         # (1) Set model in training mode.
         model.train()
@@ -105,42 +99,47 @@ class Trainer:
         losses = []
         # (4) Start training loop
         printout_constant = (self.args['num_epochs'] // 10) + 1
-        start_time = time.time()
-        # For every some epochs, we should change the size of input
-        for it in range(1, self.args['num_epochs'] + 1):
-            epoch_loss = 0
-            # (5) Mini-batch.
-            for xpos, xneg, y in data_loader:
-                # (5.1) Send the batch into device.
-                xpos, xneg, y = xpos.to(self.device), xneg.to(self.device), y.to(self.device)
-                # (5.2) Zero the parameter gradients.
-                optimizer.zero_grad()
-                # (5.3) Forward.
-                predictions = model.forward(xpos=xpos, xneg=xneg)
-                # (5.4) Compute Loss.
-                batch_loss = loss_func(y, predictions)
-                epoch_loss += batch_loss.item()
-                # (5.5) Backward loss.
-                batch_loss.backward()
-                # (5.6) Update parameters according.
-                optimizer.step()
-            # (6) Store epoch loss
-            losses.append(epoch_loss)
-            # (7) Print-out
-            if it % printout_constant == 0:
-                self.logger.info(f'{it}.th epoch loss: {epoch_loss}')
+        if self.args['num_epochs'] > 0:
+            data_loader = torch.utils.data.DataLoader(Dataset(self.learning_problems),
+                                                      batch_size=self.args['batch_size'],
+                                                      num_workers=self.args['num_workers'], shuffle=True)
 
-            if it % self.args['val_at_every_epochs'] == 0:
-                self.validate(model, lp=self.learning_problems, args={'topK': 100})
-                model.train()
+            start_time = time.time()
+            # For every some epochs, we should change the size of input
+            for it in range(1, self.args['num_epochs'] + 1):
+                epoch_loss = 0
+                # (5) Mini-batch.
+                for xpos, xneg, y in data_loader:
+                    # (5.1) Send the batch into device.
+                    xpos, xneg, y = xpos.to(self.device), xneg.to(self.device), y.to(self.device)
+                    # (5.2) Zero the parameter gradients.
+                    optimizer.zero_grad()
+                    # (5.3) Forward.
+                    predictions = model.forward(xpos=xpos, xneg=xneg)
+                    # (5.4) Compute Loss.
+                    batch_loss = loss_func(y, predictions)
+                    epoch_loss += batch_loss.item()
+                    # (5.5) Backward loss.
+                    batch_loss.backward()
+                    # (5.6) Update parameters according.
+                    optimizer.step()
+                # (6) Store epoch loss
+                losses.append(epoch_loss)
+                # (7) Print-out
+                if it % printout_constant == 0:
+                    self.logger.info(f'{it}.th epoch loss: {epoch_loss}')
 
-        training_time = time.time() - start_time
-        # Save
-        self.logger.info(f'TrainingRunTime {training_time / 60:.3f} minutes')
-        self.logger.info('Save the loss epoch trajectory')
-        np.savetxt(fname=self.storage_path + "/loss_per_epoch.csv", X=np.array(losses), delimiter=",")
-        self.logger.info('Save Weights')
-        save_weights(model, self.storage_path)
+                if it % self.args['val_at_every_epochs'] == 0:
+                    self.validate(model, lp=self.learning_problems, args={'topK': 100})
+                    model.train()
+
+            training_time = time.time() - start_time
+            # Save
+            self.logger.info(f'TrainingRunTime {training_time / 60:.3f} minutes')
+            self.logger.info('Save the loss epoch trajectory')
+            np.savetxt(fname=self.storage_path + "/loss_per_epoch.csv", X=np.array(losses), delimiter=",")
+            self.logger.info('Save Weights')
+            save_weights(model, self.storage_path)
 
         model.eval()
         self.logger.info('Training Loop ends')
@@ -166,7 +165,7 @@ class Trainer:
             f'Avg. F-measure NCEL:{avg_f1_ncel}\t Avg. Runtime:{avg_runtime_ncel}\t Avg. Expression Tested:{avg_expression_ncel} in {len(lp)} LPs ')
         self.logger.info('Validation Ends')
 
-    def serialize_ncel(self,model):
+    def serialize_ncel(self, model):
         # (2) Serialize model and weights
         embeddings = model.embeddings_to_numpy()
         df = pd.DataFrame(embeddings, index=self.instances)

@@ -31,19 +31,23 @@ if __name__ == '__main__':
     # General
     parser.add_argument("--path_knowledge_base", type=str,
                         default='/home/demir/Desktop/Softwares/Ontolearn/KGs/Family/family-benchmark_rich_background.owl',
+                        # default='/home/demir/Desktop/Softwares/DeepTunnellingForRefinementOperators/KGs/Carcinogenesis/carcinogenesis.owl',
+                        # default='/home/demir/Desktop/Softwares/DeepTunnellingForRefinementOperators/KGs/Mutagenesis/mutagenesis.owl',
                         # default='/home/demir/Desktop/Softwares/Ontolearn/KGs/Carcinogenesis/carcinogenesis.owl',
                         help='The absolute path of a knowledge base required.')
-    parser.add_argument("--path_lp", type=str, default='LPs/Family/lp_dl_learner.json',
+    parser.add_argument("--path_lp", type=str,
+                        # default='/home/demir/Desktop/Softwares/DeepTunnellingForRefinementOperators/LPs/Family/lp_dl_learner.json',
+                        default=None,
                         help='If None, examples are randomly generated')
     parser.add_argument("--dl_learner_binary_path", type=str, default='dllearner-1.4.0/')
-    parser.add_argument('--num_workers', type=int, default=0, help='Number of cpus used during batching')
+    parser.add_argument('--num_workers', type=int, default=4, help='Number of cpus used during batching')
 
     # Class Expression Learning
     parser.add_argument("--num_individual_per_example", type=int, default=20,
-                        help='Input set size for expression learning.')
-    parser.add_argument("--num_of_learning_problems_training", type=int, default=200,
+                        help='Input set size |E^+| and |E^-|.')
+    parser.add_argument("--num_of_learning_problems_training", type=int, default=2,
                         help='Total number of randomly generated learning problems for training.')
-    parser.add_argument("--num_of_learning_problems_testing", type=int, default=10,
+    parser.add_argument("--num_of_learning_problems_testing", type=int, default=None,
                         help='Total number of randomly generated learning problems for testing.')
 
     # Neural related
@@ -52,23 +56,26 @@ if __name__ == '__main__':
                         help='[ST(Set Transformer),DeepSet]')
 
     parser.add_argument("--number_of_target_expressions", type=int,
-                        default=1000,
+                        default=5_000,
                         help='Randomly select target class expressions as labels.')
 
     parser.add_argument("--target_expression_selection", type=str,
                         default='diverse_target_expression_selection',
                         help='[diverse_target_expression_selection, random_target_expression_selection]')
+    parser.add_argument("--tolerance_for_search_unique_target_exp", type=int,
+                        default=100,
+                        help='Break refinement if its first expressions are not informed')
 
     # Hyperparameters of Neural Class Expression
-    parser.add_argument("--num_embedding_dim", type=int, default=10, help='Number of embedding dimensions.')
+    parser.add_argument("--num_embedding_dim", type=int, default=1, help='Number of embedding dimensions.')
     # Training Related
     parser.add_argument("--learning_rate", type=int, default=.001, help='Learning Rate')
-    parser.add_argument("--num_epochs", type=int, default=500, help='Number of iterations over the entire dataset.')
-    parser.add_argument("--val_at_every_epochs", type=int, default=25, help='How often eval.')
+    parser.add_argument("--num_epochs", type=int, default=10, help='Number of iterations over the entire dataset.')
+    parser.add_argument("--val_at_every_epochs", type=int, default=2, help='How often eval.')
 
-    parser.add_argument("--batch_size", type=int, default=1024)
+    parser.add_argument("--batch_size", type=int, default=32)
     # Inference Related
-    parser.add_argument("--topK", type=int, default=10,
+    parser.add_argument("--topK", type=int, default=None,
                         help='Test the highest topK target expressions')
 
     # Analysis Related

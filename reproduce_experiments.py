@@ -121,12 +121,20 @@ def run(settings):
 if __name__ == '__main__':
     parser = ArgumentParser()
     # General
+    # Repo Family
+    """
     parser.add_argument("--path_of_experiment_folder", type=str,
                         default='/home/demir/Desktop/Softwares/DeepTunnellingForRefinementOperators/PretrainedModels/Family/2021-11-17 18:00:28.803967')
     parser.add_argument("--path_of_json_learning_problems", type=str,
                         default='/home/demir/Desktop/Softwares/DeepTunnellingForRefinementOperators/LPs/Family/lp_dl_learner.json')
+    """
+
+    parser.add_argument("--path_of_experiment_folder", type=str,
+                        default='/home/demir/Desktop/Softwares/DeepTunnellingForRefinementOperators/Experiments/2021-11-23 17:18:24.855176')
+    parser.add_argument("--path_of_json_learning_problems", type=str,
+                        default='/home/demir/Desktop/Softwares/DeepTunnellingForRefinementOperators/LPs/Mutagenesis/lp_dl_learner.json')
     # Inference Related
-    parser.add_argument("--topK", type=int, default=None,
+    parser.add_argument("--topK", type=int, default=100_000,
                         help='Test the highest topK target expressions')
 
     run(vars(parser.parse_args()))

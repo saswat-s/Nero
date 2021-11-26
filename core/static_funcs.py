@@ -12,9 +12,67 @@ from ontolearn.refinement_operators import LengthBasedRefinement
 from owlapy.render import DLSyntaxObjectRenderer
 from owlapy.model import OWLObjectSomeValuesFrom, OWLObjectAllValuesFrom
 import random
-
 from random import randint
 
+from sys import getsizeof, stderr
+from itertools import chain
+from collections import deque
+try:
+    from reprlib import repr
+except ImportError:
+    pass
+
+def total_size(o, handlers={}, verbose=False):
+    """ Returns the approximate memory footprint an object and all of its contents.
+
+    Automatically finds the contents of the following builtin containers and
+    their subclasses:  tuple, list, deque, dict, set and frozenset.
+    To search other containers, add handlers to iterate over their contents:
+
+        handlers = {SomeContainerClass: iter,
+                    OtherContainerClass: OtherContainerClass.get_elements}
+
+    CD: obtained from one and only  Raymond Hettinger :)
+    source : https://code.activestate.com/recipes/577504/
+
+    """
+    dict_handler = lambda d: chain.from_iterable(d.items())
+    all_handlers = {tuple: iter,
+                    list: iter,
+                    deque: iter,
+                    dict: dict_handler,
+                    set: iter,
+                    frozenset: iter,
+                   }
+    all_handlers.update(handlers)     # user handlers take precedence
+    seen = set()                      # track which object id's have already been seen
+    default_size = getsizeof(0)       # estimate sizeof object without __sizeof__
+
+    def sizeof(o):
+        if id(o) in seen:       # do not double count the same object
+            return 0
+        seen.add(id(o))
+        s = getsizeof(o, default_size)
+
+        if verbose:
+            print(s, type(o), repr(o), file=stderr)
+
+        for typ, handler in all_handlers.items():
+            if isinstance(o, typ):
+                s += sum(map(sizeof, handler(o)))
+                break
+        return s
+
+    return sizeof(o)
+
+
+##### Example call #####
+#d = dict(a=1, b=2, c=3, d=[4,5,6,7], e='a string of chars')
+#print(total_size(d, verbose=True))
+import resource
+def using(point=""):
+    usage=resource.getrusage(resource.RUSAGE_SELF)
+    return '''%s: usertime=%s systime=%s mem=%s mb '''%(point,usage[0],usage[1], usage[2]/1024.0 )
 
 class TargetClassExpression:
     def __init__(self, *, label_id: int, name: str, individuals: Set, idx_individuals: Set, expression_chain: List):
@@ -30,9 +88,9 @@ class TargetClassExpression:
         self.idx_individuals = idx_individuals
         self.expression_chain = expression_chain
         assert len(self.individuals) == len(self.idx_individuals)
-
+        self.num_individuals = len(self.individuals)
     def __str__(self):
-        return f'{self.name}\tIndv:{len(self.individuals)}'
+        return f'{self.name}\tIndv:{self.num_individuals}'
 
     def __repr__(self):
         return self.__str__()
