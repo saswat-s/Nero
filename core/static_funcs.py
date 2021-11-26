@@ -17,10 +17,12 @@ from random import randint
 from sys import getsizeof, stderr
 from itertools import chain
 from collections import deque
+
 try:
     from reprlib import repr
 except ImportError:
     pass
+
 
 def total_size(o, handlers={}, verbose=False):
     """ Returns the approximate memory footprint an object and all of its contents.
@@ -43,13 +45,13 @@ def total_size(o, handlers={}, verbose=False):
                     dict: dict_handler,
                     set: iter,
                     frozenset: iter,
-                   }
-    all_handlers.update(handlers)     # user handlers take precedence
-    seen = set()                      # track which object id's have already been seen
-    default_size = getsizeof(0)       # estimate sizeof object without __sizeof__
+                    }
+    all_handlers.update(handlers)  # user handlers take precedence
+    seen = set()  # track which object id's have already been seen
+    default_size = getsizeof(0)  # estimate sizeof object without __sizeof__
 
     def sizeof(o):
-        if id(o) in seen:       # do not double count the same object
+        if id(o) in seen:  # do not double count the same object
             return 0
         seen.add(id(o))
         s = getsizeof(o, default_size)
@@ -66,15 +68,15 @@ def total_size(o, handlers={}, verbose=False):
     return sizeof(o)
 
 
-##### Example call #####
-#d = dict(a=1, b=2, c=3, d=[4,5,6,7], e='a string of chars')
-#print(total_size(d, verbose=True))
 import resource
-def using(point=""):
-    usage=resource.getrusage(resource.RUSAGE_SELF)
-    return '''%s: usertime=%s systime=%s mem=%s mb '''%(point,usage[0],usage[1], usage[2]/1024.0 )
 
-class TargetClassExpression:
+
+def using(point=""):
+    usage = resource.getrusage(resource.RUSAGE_SELF)
+    return '''%s: usertime=%s systime=%s mem=%s mb ''' % (point, usage[0], usage[1], usage[2] / 1024.0)
+
+
+class TargetClassExpression_old:
     def __init__(self, *, label_id: int, name: str, individuals: Set, idx_individuals: Set, expression_chain: List):
         assert isinstance(label_id, int)
         assert isinstance(name, str)
@@ -89,6 +91,7 @@ class TargetClassExpression:
         self.expression_chain = expression_chain
         assert len(self.individuals) == len(self.idx_individuals)
         self.num_individuals = len(self.individuals)
+
     def __str__(self):
         return f'{self.name}\tIndv:{self.num_individuals}'
 
@@ -108,6 +111,43 @@ class TargetClassExpression:
             label_id=-2,
             name=f'({self.name}) ⊔ ({other.name})',
             individuals=self.individuals.union(other.individuals),
+            idx_individuals=self.idx_individuals.union(other.idx_individuals),
+            expression_chain=self.expression_chain + [other.name])
+
+
+class TargetClassExpression:
+    def __init__(self, *, label_id: int, name: str, idx_individuals: Set, expression_chain: List):
+        assert isinstance(label_id, int)
+        assert isinstance(name, str)
+        assert isinstance(idx_individuals, frozenset)
+        assert isinstance(expression_chain, list)
+
+        self.label_id = label_id
+        self.name = name
+        self.idx_individuals = idx_individuals
+        self.expression_chain = expression_chain
+        self.num_individuals = len(self.idx_individuals)
+    @property
+    def size(self):
+        return self.num_individuals
+
+    def __str__(self):
+        return f'{self.name}\tIndv:{self.num_individuals}'
+
+    def __repr__(self):
+        return self.__str__()
+
+    def __mul__(self, other):
+        return TargetClassExpression(
+            label_id=-1,
+            name=f'({self.name}) ⊓ ({other.name})',
+            idx_individuals=self.idx_individuals.intersection(other.idx_individuals),
+            expression_chain=self.expression_chain + [other.name])
+
+    def __add__(self, other):
+        return TargetClassExpression(
+            label_id=-2,
+            name=f'({self.name}) ⊔ ({other.name})',
             idx_individuals=self.idx_individuals.union(other.idx_individuals),
             expression_chain=self.expression_chain + [other.name])
 

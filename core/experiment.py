@@ -1,3 +1,4 @@
+import random
 from logging import Logger
 
 from ontolearn import KnowledgeBase
@@ -21,6 +22,7 @@ import os
 from random import randint
 import time
 
+
 class Experiment:
     """ Main class for conducting experiments """
 
@@ -33,7 +35,7 @@ class Experiment:
         self.args['storage_path'] = self.storage_path
 
         # (2) Initialize KB
-        self.logger.info("Knowledge Base being Initialized")
+        self.logger.info(f"Knowledge Base being Initialized {self.args['path_knowledge_base']}")
         kb = KnowledgeBase(path=self.args['path_knowledge_base'],
                            reasoner_factory=ClosedWorld_ReasonerFactory)
         # (2.1) Store some info about KB
@@ -45,10 +47,17 @@ class Experiment:
         self.logger.info(f'Number of individuals: {self.args["num_instances"]}')
         self.logger.info(f'Number of named classes / expressions: {self.args["num_named_classes"]}')
         self.logger.info(f'Number of properties / roles : {self.args["num_properties"]}')
-
+        try:
+            assert self.args['num_instances']>0
+        except AssertionError:
+            print(f'Number of entities can not be 0, *** {self.args["num_instances"]}')
+            print('Background knowledge should be OWL 2.')
+            exit(1)
         # (3) Initialize Learning problems
         target_class_expressions, instance_idx_mapping = select_target_expressions(kb, self.args, logger=self.logger)
-        e_pos, e_neg = generate_random_learning_problems(instance_idx_mapping, self.args)
+        # e_pos, e_neg = generate_random_learning_problems(instance_idx_mapping, self.args)
+        e_pos, e_neg = generate_learning_problems_from_targets(target_class_expressions, instance_idx_mapping,
+                                                               self.args)
 
         self.lp = LP(e_pos=e_pos, e_neg=e_neg, instance_idx_mapping=instance_idx_mapping,
                      target_class_expressions=target_class_expressions)
@@ -81,8 +90,6 @@ class Experiment:
         save_as_json(storage_path=self.storage_path, obj={target_cl.label_id: {'label_id': target_cl.label_id,
                                                                                'name': target_cl.name,
                                                                                'expression_chain': target_cl.expression_chain,
-                                                                               'individuals': list(
-                                                                                   target_cl.individuals),
                                                                                'idx_individuals': list(
                                                                                    target_cl.idx_individuals),
                                                                                }
@@ -109,7 +116,8 @@ class Experiment:
             # (2) Load learning problems
             with open(self.args['path_lp']) as json_file:
                 settings = json.load(json_file)
-            lp = [(list(v['positive_examples']), list(v['negative_examples'])) for k, v in settings['problems'].items()]
+            lp = [(k, list(v['positive_examples']), list(v['negative_examples'])) for k, v in
+                  settings['problems'].items()]
 
             # (2) Evaluate model
             self.evaluate(ncel, lp, self.args)
@@ -122,13 +130,13 @@ class Experiment:
         ncel_results = dict()
         celoe_results = dict()
         # (1) Iterate over input learning problems.
-        for _, (p, n) in enumerate(lp):
+        for _, (goal_exp, p, n) in enumerate(lp):
             ncel_report = ncel.fit(pos=p, neg=n, topK=args['topK'], local_search=False)
             ncel_report.update({'P': p, 'N': n, 'F-measure': f_measure(instances=ncel_report['Instances'],
                                                                        positive_examples=set(p),
                                                                        negative_examples=set(n)),
                                 })
-
+            ncel_report.update({'Target': goal_exp})
             ncel_results[_] = ncel_report
             if args['eval_dl_learner']:
                 celoe = DLLearnerBinder(binary_path=args['dl_learner_binary_path'], kb_path=args['path_knowledge_base'],
@@ -140,11 +148,18 @@ class Experiment:
                                     'NumClassTested': best_pred_celoe['NumClassTested'],
                                     'Runtime': best_pred_celoe['Runtime'],
                                     }
+        if len(ncel_results) < 50:
+            for k, v in ncel_results.items():
+                self.logger.info(
+                    f'{k}.th test LP:\tTarget:{v["Target"]}\tPred:{v["Prediction"]}\tF-measure:{v["F-measure"]:.3f}\tNumClassTested:{v["NumClassTested"]}')
+
+        # Overall Preport
         avg_f1_ncel = np.array([i['F-measure'] for i in ncel_results.values()]).mean()
         avg_runtime_ncel = np.array([i['Runtime'] for i in ncel_results.values()]).mean()
         avg_expression_ncel = np.array([i['NumClassTested'] for i in ncel_results.values()]).mean()
         self.logger.info(
             f'Average F-measure NCEL:{avg_f1_ncel}\t Avg. Runtime:{avg_runtime_ncel}\t Avg. Expression Tested:{avg_expression_ncel} in {len(lp)} ')
+
         if args['eval_dl_learner']:
             avg_f1_celoe = np.array([i['F-measure'] for i in celoe_results.values()]).mean()
             avg_runtime_celoe = np.array([i['Runtime'] for i in celoe_results.values()]).mean()
@@ -191,7 +206,7 @@ def target_expressions_via_refining_top(rho, kb, number_of_target_expressions, n
     rl_state.instances = set(kb.individuals(rl_state.concept))
     renderer = DLSyntaxObjectRenderer()
     target_class_expressions = set()
-    target_instance_set = set()
+    target_idx_instance_set = set()
     quantifiers = set()
 
     # (1) Refine Top concept
@@ -199,17 +214,15 @@ def target_expressions_via_refining_top(rho, kb, number_of_target_expressions, n
         # (3) Continue only concept is not empty.
         if num_of_all_individuals > len(i.instances) > 0:
             # (3.1) Add OWL class expression if, its instances is not already seen
-            poss_target_individuals = frozenset(_.get_iri().as_str() for _ in i.instances)
-            if poss_target_individuals not in target_instance_set:
+            poss_target_idx_individuals = frozenset(instance_idx_mapping[_.get_iri().as_str()] for _ in i.instances)
+            if poss_target_idx_individuals not in target_idx_instance_set:
                 # (3.1.) Add instances
-                target_instance_set.add(poss_target_individuals)
+                target_idx_instance_set.add(poss_target_idx_individuals)
                 # ( 3.2.) Create an instance
                 target = TargetClassExpression(
-                    label_id=len(target_instance_set),
+                    label_id=len(target_idx_instance_set),
                     name=renderer.render(i.concept),
-                    individuals=poss_target_individuals,
-                    idx_individuals=frozenset(
-                        instance_idx_mapping[_.get_iri().as_str()] for _ in i.instances),
+                    idx_individuals=poss_target_idx_individuals,
                     expression_chain=[renderer.render(x.concept) for x in
                                       retrieve_concept_chain(i)]
                 )
@@ -220,13 +233,12 @@ def target_expressions_via_refining_top(rho, kb, number_of_target_expressions, n
             if isinstance(i.concept, OWLObjectAllValuesFrom) or isinstance(i.concept, OWLObjectSomeValuesFrom):
                 quantifiers.add(i)
             if len(target_class_expressions) == number_of_target_expressions:
-                logger.info(f'{number_of_target_expressions} target expressions generated')
                 break
 
-    return target_class_expressions, target_instance_set, quantifiers
+    return target_class_expressions, target_idx_instance_set, quantifiers
 
 
-def refine_selected_expressions(rho, kb, quantifiers, target_class_expressions, target_instance_set,
+def refine_selected_expressions(rho, kb, quantifiers, target_class_expressions, target_idx_instance_set,
                                 tolerance_for_search_unique_target_exp, instance_idx_mapping,
                                 number_of_target_expressions, num_of_all_individuals) -> None:
     renderer = DLSyntaxObjectRenderer()
@@ -243,17 +255,17 @@ def refine_selected_expressions(rho, kb, quantifiers, target_class_expressions, 
                     if len(target_class_expressions) >= number_of_target_expressions:
                         break
                     # (3.1) Add OWL class expresssion if, its instances is not already seen
-                    poss_target_individuals = frozenset(_.get_iri().as_str() for _ in ref_selected_states.instances)
-                    if poss_target_individuals not in target_instance_set:
+                    # poss_target_individuals = frozenset(_.get_iri().as_str() for _ in ref_selected_states.instances)
+                    poss_target_idx_individuals = frozenset(
+                        instance_idx_mapping[_.get_iri().as_str()] for _ in ref_selected_states.instances)
+                    if poss_target_idx_individuals not in target_idx_instance_set:
                         # (3.1.) Add instances
-                        target_instance_set.add(poss_target_individuals)
+                        target_idx_instance_set.add(poss_target_idx_individuals)
                         # ( 3.2.) Create an instance
                         target = TargetClassExpression(
-                            label_id=len(target_instance_set),
+                            label_id=len(target_idx_instance_set),
                             name=renderer.render(ref_selected_states.concept),
-                            individuals=poss_target_individuals,
-                            idx_individuals=frozenset(
-                                instance_idx_mapping[_.get_iri().as_str()] for _ in ref_selected_states.instances),
+                            idx_individuals=poss_target_idx_individuals,
                             expression_chain=[renderer.render(x.concept) for x in
                                               retrieve_concept_chain(ref_selected_states)]
                         )
@@ -269,11 +281,9 @@ def refine_selected_expressions(rho, kb, quantifiers, target_class_expressions, 
                 break
 
 
-def intersect_and_union_expressions_from_iterable(target_class_expressions, target_instance_set,
+def intersect_and_union_expressions_from_iterable(target_class_expressions, target_idx_instance_set,
                                                   number_of_target_expressions):
-    while len(target_instance_set) < number_of_target_expressions:
-
-        # print(f'{len(target_class_expressions)} is created as a result of refining the top concept and quantifiers.')
+    while len(target_idx_instance_set) < number_of_target_expressions:
 
         res = set()
         for i in target_class_expressions:
@@ -283,25 +293,25 @@ def intersect_and_union_expressions_from_iterable(target_class_expressions, targ
                     continue
 
                 i_and_j = i * j
-                if len(i_and_j.individuals) > 0 and (i_and_j.individuals not in target_instance_set):
+                if i_and_j.size > 0 and (i_and_j.idx_individuals not in target_idx_instance_set):
                     res.add(i_and_j)
-                    target_instance_set.add(i_and_j.individuals)
-                    i_and_j.label_id = len(target_instance_set)
+                    target_idx_instance_set.add(i_and_j.idx_individuals)
+                    i_and_j.label_id = len(target_idx_instance_set)
                 else:
                     del i_and_j
 
-                if len(target_instance_set) >= number_of_target_expressions:
+                if len(target_idx_instance_set) >= number_of_target_expressions:
                     break
 
                 i_or_j = i + j
-                if len(i_or_j.individuals) > 0 and (i_or_j.individuals not in target_instance_set):
+                if i_or_j.size > 0 and (i_or_j.idx_individuals not in target_idx_instance_set):
                     res.add(i_or_j)
-                    target_instance_set.add(i_or_j.individuals)
-                    i_or_j.label_id = len(target_instance_set)
+                    target_idx_instance_set.add(i_or_j.idx_individuals)
+                    i_or_j.label_id = len(target_idx_instance_set)
                 else:
                     del i_or_j
 
-                if len(target_instance_set) >= number_of_target_expressions:
+                if len(target_idx_instance_set) >= number_of_target_expressions:
                     break
         target_class_expressions.update(res)
 
@@ -320,22 +330,26 @@ def diverse_target_expression_selection(kb, tolerance_for_search_unique_target_e
     # Preparation
     rho = LengthBasedRefinement(knowledge_base=kb)
     num_of_all_individuals = kb.individuals_count()
-    target_class_expressions, target_instance_set, quantifiers = target_expressions_via_refining_top(rho=rho,
-                                                                                                     kb=kb,
-                                                                                                     number_of_target_expressions=number_of_target_expressions,
-                                                                                                     num_of_all_individuals=num_of_all_individuals,
-                                                                                                     instance_idx_mapping=instance_idx_mapping)
-    logger.info(f'{len(target_class_expressions)} number of target expressions are obtained from the most general expression.')
-    assert len(target_instance_set) == len(target_class_expressions)
+    target_class_expressions, target_idx_instance_set, quantifiers = target_expressions_via_refining_top(rho=rho,
+                                                                                                         kb=kb,
+                                                                                                         number_of_target_expressions=number_of_target_expressions,
+                                                                                                         num_of_all_individuals=num_of_all_individuals,
+                                                                                                         instance_idx_mapping=instance_idx_mapping)
+    logger.info(
+        f'{len(target_class_expressions)} number of target expressions are obtained from the most general expression.')
+    assert len(target_idx_instance_set) == len(target_class_expressions)
 
-    refine_selected_expressions(rho, kb, quantifiers, target_class_expressions, target_instance_set,
+    refine_selected_expressions(rho, kb, quantifiers, target_class_expressions, target_idx_instance_set,
                                 tolerance_for_search_unique_target_exp, instance_idx_mapping,
                                 number_of_target_expressions, num_of_all_individuals)
-    logger.info(f'{len(target_class_expressions)} number of target expressions are obtained from the most general expression and quantifiers')
-    assert len(target_instance_set) == len(target_class_expressions)
-    intersect_and_union_expressions_from_iterable(target_class_expressions, target_instance_set,
+    logger.info(
+        f'{len(target_class_expressions)} number of target expressions are obtained from the most general expression and quantifiers')
+    assert len(target_idx_instance_set) == len(target_class_expressions)
+    intersect_and_union_expressions_from_iterable(target_class_expressions, target_idx_instance_set,
                                                   number_of_target_expressions)
-    logger.info(f'{len(target_class_expressions)} number of target expressions are obtained from the most general expression, quantifiers, and intersect/union all previous expressions')
+    logger.info(
+        f'{len(target_class_expressions)} number of target expressions are obtained from the most general expression, quantifiers, and intersect/union all previous expressions')
+    assert len(target_idx_instance_set) == len(target_class_expressions)
 
     result = []
     for ith, tce in enumerate(target_class_expressions):
@@ -395,12 +409,36 @@ def random_target_expression_selection(kb, number_of_target_expressions, instanc
         target = TargetClassExpression(
             label_id=id_t,
             name=renderer.render(i.concept),
-            individuals=frozenset(_.get_iri().as_str() for _ in i.instances),
             idx_individuals=frozenset(instance_idx_mapping[_.get_iri().as_str()] for _ in i.instances),
             expression_chain=[renderer.render(x.concept) for x in retrieve_concept_chain(i)]
         )
         labels.append(target)
     return labels
+
+
+def generate_learning_problems_from_targets(target_class_expressions: List[TargetClassExpression],
+                                            instance_idx_mapping: Dict,
+                                            args: Dict) -> Tuple[List[int], List[int]]:
+    """
+    Sample pos from targets
+
+    :param target_class_expressions:
+    :param instance_idx_mapping:
+    :param args:
+    :return:
+    """
+    random.seed(0)
+    instances_idx_list = list(instance_idx_mapping.values())
+
+    pos_examples = []
+    neg_examples = []
+    num_individual_per_example = args['num_individual_per_example']
+    for i in range(args['num_of_learning_problems_training']):
+        for tce in target_class_expressions:
+            pos_examples.append(random.choices(list(tce.idx_individuals), k=num_individual_per_example))
+            neg_examples.append(random.choices(instances_idx_list, k=num_individual_per_example))
+    assert len(pos_examples) == len(neg_examples)
+    return pos_examples, neg_examples
 
 
 def generate_random_learning_problems(instance_idx_mapping: Dict,
@@ -425,5 +463,4 @@ def generate_random_learning_problems(instance_idx_mapping: Dict,
         pos_examples.append(random.choices(instances_idx_list, k=num_individual_per_example))
         neg_examples.append(random.choices(instances_idx_list, k=num_individual_per_example))
     assert len(pos_examples) == len(neg_examples)
-
     return pos_examples, neg_examples

@@ -19,6 +19,7 @@ class NCEL:
         self.quality_func = quality_func
         self.target_class_expressions = target_class_expressions
         self.instance_idx_mapping = instance_idx_mapping
+        self.inverse_instance_idx_mapping=dict(zip(self.instance_idx_mapping.values(),self.instance_idx_mapping.keys()))
         self.renderer = DLSyntaxObjectRenderer()
         self.max_top_k = len(self.target_class_expressions)
 
@@ -27,10 +28,11 @@ class NCEL:
 
     def positive_embeddings_from_iterable_of_individuals(self, pos: Iterable[str]):
         raise NotImplementedError()
+        """
         pred = self.forward(xpos=torch.LongTensor([[self.instance_idx_mapping[i] for i in pos]]),
                             xneg=torch.LongTensor([[self.instance_idx_mapping[i] for i in neg]]))
-        return self.model(xpos, xneg)
-
+        self.model(xpos, xneg)
+        """
     def negative_embeddings(self, xpos):
         return self.model(xpos, xneg)
 
@@ -131,29 +133,29 @@ class NCEL:
         results = []
         # We could apply multi_processing here
         # Explore only top K class expressions that have received highest K scores
-        set_pos = set(pos)
-        set_neg = set(neg)
+        set_str_pos = set(pos)
+        set_str_neg = set(neg)
+
         for i in sort_idxs[:topK]:
+            str_instances={ self.inverse_instance_idx_mapping[i] for i in self.target_class_expressions[i].idx_individuals}
             s: float = self.quality_func(
-                instances=self.target_class_expressions[i].individuals,
-                positive_examples=set_pos, negative_examples=set_neg)
-            results.append((s, self.target_class_expressions[i]))
+                instances=str_instances,
+                positive_examples=set_str_pos, negative_examples=set_str_neg)
+            results.append((s, self.target_class_expressions[i],str_instances))
             if s == 1.0:
                 # print('Goal Found in the tunnelling')
                 goal_found = True
                 break
-        # self.__intersection_topK(results, set_pos, set_neg)
-        # self.__union_topK(results, set_pos, set_neg)
         if goal_found is False and local_search:
             extended_results = self.__refine_topK(results, set_pos, set_neg, stop_at=topK)
             results.extend(extended_results)
 
         num_expression_tested = len(results)
         results = sorted(results, key=lambda x: x[0], reverse=True)
-        f1, top_pred = results[0]
+        f1, top_pred, top_str_instances= results[0]
 
         report = {'Prediction': top_pred.name,
-                  'Instances': top_pred.individuals,
+                  'Instances': top_str_instances,
                   'F1-Score': f1,
                   'NumClassTested': num_expression_tested,
                   'Runtime': time.time() - start_time,
@@ -200,11 +202,13 @@ class NCEL:
         # Explore only top K class expressions that have received highest K scores
         set_pos = set(pos)
         set_neg = set(neg)
-        for i in sort_idxs[:topK]:
+        for the_exploration, idx_target in enumerate(sort_idxs[:topK]):
+            str_instances={ self.inverse_instance_idx_mapping[_] for _ in self.target_class_expressions[idx_target].idx_individuals}
+
             s: float = self.quality_func(
-                instances=self.target_class_expressions[i].individuals,
+                instances=str_instances,
                 positive_examples=set_pos, negative_examples=set_neg)
-            results.append((s, self.target_class_expressions[i]))
+            results.append((s, self.target_class_expressions[idx_target], str_instances,the_exploration+1))
             if s == 1.0:
                 # if goal found break it.
                 break

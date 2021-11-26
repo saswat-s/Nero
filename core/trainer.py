@@ -81,8 +81,6 @@ class Trainer:
         # loss_func = torch.nn.CrossEntropyLoss()
 
         optimizer = torch.optim.Adam(model.parameters(), lr=self.args['learning_rate'])
-        self.logger.info('Data being labelled')
-        # (4) Initialize the mini-batch loader
         """
         # DatasetWithOnFlyLabelling uses less memory but takes too much time although all cpus are used
         data_loader = torch.utils.data.DataLoader(DatasetWithOnFlyLabelling(self.learning_problems),
@@ -90,7 +88,6 @@ class Trainer:
                                                   num_workers=self.args['num_workers'], shuffle=True)
         
         """
-        self.logger.info('Training starts')
         # (1) Set model in training mode.
         model.train()
         # (2) Send model to selected device.
@@ -100,10 +97,13 @@ class Trainer:
         # (4) Start training loop
         printout_constant = (self.args['num_epochs'] // 10) + 1
         if self.args['num_epochs'] > 0:
+            self.logger.info('Data being labelled')
+            # (4) Initialize the mini-batch loader
             data_loader = torch.utils.data.DataLoader(Dataset(self.learning_problems),
                                                       batch_size=self.args['batch_size'],
                                                       num_workers=self.args['num_workers'], shuffle=True)
 
+            self.logger.info('Training starts')
             start_time = time.time()
             # For every some epochs, we should change the size of input
             for it in range(1, self.args['num_epochs'] + 1):
