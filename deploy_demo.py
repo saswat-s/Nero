@@ -2,6 +2,8 @@
 Deploy our approach
 """
 from typing import Dict
+
+import pandas as pd
 import torch
 import json
 import gradio as gr
@@ -9,6 +11,7 @@ from core import NCEL, DeepSet, ST, TargetClassExpression, f_measure
 from random import randint
 from argparse import ArgumentParser
 import random
+
 
 def load_target_class_expressions_and_instance_idx_mapping(args):
     """
@@ -40,11 +43,9 @@ def load_target_class_expressions_and_instance_idx_mapping(args):
 
             t = TargetClassExpression(label_id=v['label_id'],
                                       name=v['name'],
-                                      individuals=frozenset(v['individuals']),
                                       idx_individuals=frozenset(v['idx_individuals']),
                                       expression_chain=v['expression_chain'])
             assert len(t.idx_individuals) == len(v['idx_individuals'])
-            assert len(t.individuals) == len(v['individuals'])
 
             target_class_expressions.append(t)
 
@@ -85,33 +86,41 @@ def load_ncel(args: Dict) -> NCEL:
     model.eval()
     return model
 
+
 def launch_service(ncel_model):
-    def predict(positive_examples, negative_examples, random_examples: bool):
+    def predict(positive_examples, negative_examples, size_of_examples, random_examples: bool):
         if random_examples:
             # Either sample from here self.instance_idx_mapping
             # or sample from targets
-            pos = ncel_model.target_class_expressions[randint(0, len(ncel_model.target_class_expressions))].individuals
-            neg = random.sample(list(ncel_model.instance_idx_mapping.keys()), len(pos))
+            pos_str = random.sample(list(ncel_model.instance_idx_mapping.keys()), int(size_of_examples))
+            neg_str = random.sample(list(ncel_model.instance_idx_mapping.keys()), int(size_of_examples))
         else:
-            pos = positive_examples.split(",")
-            neg = negative_examples.split(",")
+            pos_str = positive_examples.split(",")
+            neg_str = negative_examples.split(",")
 
         with torch.no_grad():
-            results = ncel_model.predict(pos=pos, neg=neg)
+            results, run_time = ncel_model.predict(pos=pos_str, neg=neg_str, topK=100)
+        if len(pos_str) < 20:
+            s = f'E^+:{",".join(pos_str)}\nE^-:{",".join(neg_str)}\n'
+        else:
+            s = f'|E^+|:{len(pos_str)}\n|E^-|:{len(neg_str)}\n'
+        values = []
+        for ith, (f1, target_concept, str_instances, num_exp) in enumerate(results[:10]):
+            # s += f'{ith + 1}. {target_concept.name}\t F1-score:{f1:.2f}\n'
+            values.append([ith + 1, target_concept.name, round(f1, 3)])
 
-        s = f' |E^+|{len(pos)},|E^+|{len(neg)}\n'
-        for ith, (f1, target_concept) in enumerate(results[:10]):
-            s += f'{ith + 1}. {target_concept.name}\t F1-score:{f1:.2f}\n'
-        return s
+        return s, pd.DataFrame(values, columns=['Rank', 'Exp.', 'F1-measure'])
 
     gr.Interface(
         fn=predict,
-        inputs=[gr.inputs.Textbox(lines=5, placeholder=None, label=None),
-                gr.inputs.Textbox(lines=5, placeholder=None, label=None),
-                #gr.inputs.Slider(minimum=10, maximum=1000),
+        inputs=[gr.inputs.Textbox(lines=5, placeholder=None, label='Positive Examples'),
+                gr.inputs.Textbox(lines=5, placeholder=None, label='Negative Examples'),
+                gr.inputs.Slider(minimum=1, maximum=100),
                 "checkbox"],
-        outputs=[gr.outputs.Textbox(label='Class Expression Learning')]
-    ).launch()
+        outputs=[gr.outputs.Textbox(label='Learning Problem'), gr.outputs.Dataframe(label='Predictions')],
+        title='Rapid Induction of Description Logic Expressions via Nero',
+        description='Click Random Examples & Submit.').launch()
+
 
 def run(settings):
     with open(settings['path_of_experiments'] + '/settings.json', 'r') as f:
@@ -123,12 +132,11 @@ def run(settings):
     launch_service(ncel_model)
 
 
-
 if __name__ == '__main__':
     parser = ArgumentParser()
     # General
     parser.add_argument("--path_of_experiments", type=str,
-                        default='Experiments/2021-11-17 18:00:28.803967')
+                        default='/home/demir/Desktop/Softwares/DeepTunnellingForRefinementOperators/PretrainedModels/Family/2021-11-17 18:00:28.803967')
     # Inference Related
     parser.add_argument("--topK", type=int, default=1000,
                         help='Test the highest topK target expressions')

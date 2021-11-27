@@ -1,4 +1,4 @@
-# Neural Class Expression Learner  
+# Neural Class Expression Learner  [Name will be changed]
 In this work, we propose a neural model that accurately tackles the class expression learning problem.
 Given a learning problem (a set of positive and a set negative examples), our approach leverages the Set-Transformer algorithm to obtain
 permutation invariant continues representations for input examples. Via these permutation invariant representations,
@@ -23,13 +23,21 @@ unzip dllearner-1.4.0.zip
 # Test the DL-learner framework
 dllearner-1.4.0/bin/cli dllearner-1.4.0/examples/father.conf
 ```
-# Preprocessing (Later)
+# Preprocessing
 Unzip knowledge graphs, embeddings, learning problems and pretrained models.
 ```
 unzip KGs.zip
-unzip pre_trained_agents.zip
 unzip LPs.zip
 ```
 
 # Deployment
-Generate Random Learning Problems and Infer OWL Class Expressions 
+To ease using pre-trained model, we provide an API.
+![alt text](core/deploy_1.png)
+![alt text](core/deploy_2.png)
+
+
+## Acknowledgement 
+We based our implementation on the open source implementation of [DRILL](https://arxiv.org/abs/2106.15373).
+
+## Contact
+For any further questions or suggestions, please contact:  ```caglar.demir@upb.de```

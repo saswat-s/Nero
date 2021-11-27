@@ -9,6 +9,8 @@ from random import randint
 from argparse import ArgumentParser
 import random
 import numpy as np
+import pandas as pd
+from core.static_funcs import *
 
 
 def load_target_class_expressions_and_instance_idx_mapping(args):
@@ -41,18 +43,15 @@ def load_target_class_expressions_and_instance_idx_mapping(args):
 
             t = TargetClassExpression(label_id=v['label_id'],
                                       name=v['name'],
-                                      individuals=frozenset(v['individuals']),
                                       idx_individuals=frozenset(v['idx_individuals']),
                                       expression_chain=v['expression_chain'])
             assert len(t.idx_individuals) == len(v['idx_individuals'])
-            assert len(t.individuals) == len(v['individuals'])
 
             target_class_expressions.append(t)
 
     instance_idx_mapping = dict()
     with open(args['path_of_experiment_folder'] + '/instance_idx_mapping.json', 'r') as f:
         instance_idx_mapping.update(json.load(f))
-
     return target_class_expressions, instance_idx_mapping
 
 
@@ -92,7 +91,7 @@ def predict(model, positive_examples, negative_examples):
         return model.predict(pos=positive_examples, neg=negative_examples)
 
 
-def run(settings):
+def run(settings, topK):
     # (1) Load the configuration setting.
     with open(settings['path_of_experiment_folder'] + '/settings.json', 'r') as f:
         settings.update(json.load(f))
@@ -106,35 +105,32 @@ def run(settings):
         lp.update(json.load(f))
     quality = []
     runtimes = []
-
+    tested_concepts = []
     for target_str_name, v in lp['problems'].items():
-        results, rt = ncel_model.predict(pos=v['positive_examples'], neg=v['negative_examples'], topK=settings['topK'])
+        results, rt = ncel_model.predict(pos=v['positive_examples'], neg=v['negative_examples'], topK=topK)
 
-        f1, target_concept = results[0]
+        f1, target_concept, str_instances, num_explored_exp = results[0]
+        tested_concepts.append(num_explored_exp)
         runtimes.append(rt)
         quality.append(f1)
 
     quality = np.array(quality)
     runtimes = np.array(runtimes)
-    print(f'F-measure:{quality.mean():.3f} +- {quality.std():.3f} \t Runtimes: {runtimes.mean():.3f} +- {runtimes.std():.3f} in {len(lp["problems"])} learning problems')
+    tested_concepts = np.array(tested_concepts)
+    print(
+        f'F-measure:{quality.mean():.3f} +- {quality.std():.3f} \t Num Exp. Expressions: {tested_concepts.mean():.3f} +- {tested_concepts.std():.3f}\tRuntimes: {runtimes.mean():.3f} +- {runtimes.std():.3f} in {len(lp["problems"])} learning problems')
+
 
 if __name__ == '__main__':
     parser = ArgumentParser()
     # General
     # Repo Family
-    """
     parser.add_argument("--path_of_experiment_folder", type=str,
-                        default='/home/demir/Desktop/Softwares/DeepTunnellingForRefinementOperators/PretrainedModels/Family/2021-11-17 18:00:28.803967')
+                        default='/home/demir/Desktop/Softwares/DeepTunnellingForRefinementOperators/Experiments/2021-11-27 09:35:37.213885')
     parser.add_argument("--path_of_json_learning_problems", type=str,
                         default='/home/demir/Desktop/Softwares/DeepTunnellingForRefinementOperators/LPs/Family/lp_dl_learner.json')
-    """
-
-    parser.add_argument("--path_of_experiment_folder", type=str,
-                        default='/home/demir/Desktop/Softwares/DeepTunnellingForRefinementOperators/Experiments/2021-11-23 17:18:24.855176')
-    parser.add_argument("--path_of_json_learning_problems", type=str,
-                        default='/home/demir/Desktop/Softwares/DeepTunnellingForRefinementOperators/LPs/Mutagenesis/lp_dl_learner.json')
     # Inference Related
-    parser.add_argument("--topK", type=int, default=100_000,
+    parser.add_argument("--topK", type=int, default=1000,
                         help='Test the highest topK target expressions')
-
-    run(vars(parser.parse_args()))
+    d = vars(parser.parse_args())
+    run(d, topK=d['topK'])

@@ -21,6 +21,7 @@ from collections import deque
 import os
 from random import randint
 import time
+import gc
 
 
 class Experiment:
@@ -28,13 +29,28 @@ class Experiment:
 
     def __init__(self, args):
         self.args = args
-
         # (1) Create Logging & Experiment folder for serialization
         self.storage_path, _ = create_experiment_folder(folder_name='Experiments')
         self.logger = create_logger(name='Experimenter', p=self.storage_path)
         self.args['storage_path'] = self.storage_path
 
         # (2) Initialize KB
+        kb = self.initialize_knowledge_base()
+        # (2) Initialize Training Data (D: {(E^+,E^-)})_i ^N
+        self.lp = self.construct_targets_and_problems(kb)
+        self.logger.info(self.lp)
+        # (4) Init Trainer
+        self.trainer = Trainer(learning_problems=self.lp, args=self.args, logger=self.logger)
+        self.logger.info(self.trainer)
+
+        self.instance_str = list(self.lp.instance_idx_mapping.keys())
+        self.describe_and_store()
+        del kb
+        gc.collect()
+        print('asd')
+        exit(1)
+
+    def initialize_knowledge_base(self):
         self.logger.info(f"Knowledge Base being Initialized {self.args['path_knowledge_base']}")
         kb = KnowledgeBase(path=self.args['path_knowledge_base'],
                            reasoner_factory=ClosedWorld_ReasonerFactory)
@@ -48,30 +64,23 @@ class Experiment:
         self.logger.info(f'Number of named classes / expressions: {self.args["num_named_classes"]}')
         self.logger.info(f'Number of properties / roles : {self.args["num_properties"]}')
         try:
-            assert self.args['num_instances']>0
+            assert self.args['num_instances'] > 0
         except AssertionError:
             print(f'Number of entities can not be 0, *** {self.args["num_instances"]}')
             print('Background knowledge should be OWL 2.')
             exit(1)
+        return kb
+
+    def construct_targets_and_problems(self, kb):
         # (3) Initialize Learning problems
         target_class_expressions, instance_idx_mapping = select_target_expressions(kb, self.args, logger=self.logger)
         # e_pos, e_neg = generate_random_learning_problems(instance_idx_mapping, self.args)
         e_pos, e_neg = generate_learning_problems_from_targets(target_class_expressions, instance_idx_mapping,
                                                                self.args)
+        return LP(e_pos=e_pos, e_neg=e_neg, instance_idx_mapping=instance_idx_mapping,
+                  target_class_expressions=target_class_expressions)
 
-        self.lp = LP(e_pos=e_pos, e_neg=e_neg, instance_idx_mapping=instance_idx_mapping,
-                     target_class_expressions=target_class_expressions)
-        # Delete the pointers :)
-        del kb, e_pos, e_neg, instance_idx_mapping, target_class_expressions
-        self.logger.info(self.lp)
-        # (4) Init Trainer
-        self.trainer = Trainer(learning_problems=self.lp, args=self.args, logger=self.logger)
-        self.logger.info(self.trainer)
-
-        self.instance_str = list(self.lp.instance_idx_mapping.keys())
-        self.__describe_and_store()
-
-    def __describe_and_store(self):
+    def describe_and_store(self):
         assert self.args['num_instances'] > 0
         # Sanity checking
         # cuda device
@@ -87,6 +96,17 @@ class Experiment:
         save_as_json(storage_path=self.storage_path,
                      obj=self.lp.instance_idx_mapping, name='instance_idx_mapping')
         # (3) Store Target Class Expressions with respective expression chain from T -> ... -> TargetExp
+        # Instead of storing as list of objects, we can store targets as pandas dataframe
+
+        df = pd.DataFrame([t.__dict__ for t in self.lp.target_class_expressions])
+        df.to_csv(path_or_buf=self.storage_path + '/target_class_expressions.csv')
+        # print(total_size(self.lp.target_class_expressions))
+        # print(df.memory_usage(deep=True).sum())
+        # Pandas require more memory than self.lp.target_class_expressions or our memory calculating of a list of
+        # items in correct
+
+        del df
+        gc.collect()
         save_as_json(storage_path=self.storage_path, obj={target_cl.label_id: {'label_id': target_cl.label_id,
                                                                                'name': target_cl.name,
                                                                                'expression_chain': target_cl.expression_chain,
@@ -234,7 +254,7 @@ def target_expressions_via_refining_top(rho, kb, number_of_target_expressions, n
                 quantifiers.add(i)
             if len(target_class_expressions) == number_of_target_expressions:
                 break
-
+    gc.collect()
     return target_class_expressions, target_idx_instance_set, quantifiers
 
 
@@ -279,6 +299,8 @@ def refine_selected_expressions(rho, kb, quantifiers, target_class_expressions, 
                     break
             if len(target_class_expressions) >= number_of_target_expressions:
                 break
+
+    gc.collect()
 
 
 def intersect_and_union_expressions_from_iterable(target_class_expressions, target_idx_instance_set,
@@ -355,6 +377,7 @@ def diverse_target_expression_selection(kb, tolerance_for_search_unique_target_e
     for ith, tce in enumerate(target_class_expressions):
         tce.label_id = ith
         result.append(tce)
+    gc.collect()
     return result
 
 
