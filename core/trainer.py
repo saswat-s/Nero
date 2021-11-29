@@ -105,44 +105,45 @@ class Trainer:
         printout_constant = (self.args['num_epochs'] // 10) + 1
         if self.args['num_epochs'] > 0:
             self.logger.info('Data being labelled')
-            # (4) Initialize the mini-batch loader
+            # (4.1) Initialize the mini-batch loader
             data_loader = torch.utils.data.DataLoader(
                 Dataset(self.learning_problems, num_workers_for_labelling=self.args['num_workers']),
                 batch_size=self.args['batch_size'],
                 num_workers=self.args['num_workers'], shuffle=True)
 
-            self.logger.info('Description Training Setting')
-            # (2) Describe the training setting.
+            # (4.2) Describe the training setting.
+            self.logger.info('Training starts.')
             self.describe_configuration(model, loss_func)
-
-            num_val_lp=len(self.learning_problems)//10
+            # Validation on randomly sampled 1 percent of the data
+            num_val_lp = 1 + len(self.learning_problems) // 100
             start_time = time.time()
-            # For every some epochs, we should change the size of input
+            # (5) Iterate training data
             for it in range(1, self.args['num_epochs'] + 1):
                 epoch_loss = 0
-                # (5) Mini-batch.
+                # (6) Mini-batch.
                 for xpos, xneg, y in data_loader:
-                    # (5.1) Send the batch into device.
+                    # (6.1) Send the batch into device.
                     xpos, xneg, y = xpos.to(self.device), xneg.to(self.device), y.to(self.device)
-                    # (5.2) Zero the parameter gradients.
+                    # (6.2) Zero the parameter gradients.
                     optimizer.zero_grad()
-                    # (5.3) Forward.
+                    # (6.3) Forward.
                     predictions = model.forward(xpos=xpos, xneg=xneg)
-                    # (5.4) Compute Loss.
+                    # (6.4) Compute Loss.
                     batch_loss = loss_func(y, predictions)
                     epoch_loss += batch_loss.item()
-                    # (5.5) Backward loss.
+                    # (6.5) Backward loss.
                     batch_loss.backward()
-                    # (5.6) Update parameters according.
+                    # (6.6) Update parameters according.
                     optimizer.step()
-                # (6) Store epoch loss
+                # (7) Store epoch loss
                 losses.append(epoch_loss)
-                # (7) Print-out
+                # (8) Print-out
                 if it % printout_constant == 0:
                     self.logger.info(f'{it}.th epoch loss: {epoch_loss}')
                 if it % self.args['val_at_every_epochs'] == 0:
                     # At each time randomly sample 10% of the training data.
-                    self.validate(model, lp=random.choices(self.learning_problems,k=num_val_lp),args={'topK': 100},info='Validation on Training Data Starts')
+                    self.validate(model, lp=random.choices(self.learning_problems, k=num_val_lp), args={'topK': 100},
+                                  info='Validation on Training Data Starts')
                     model.train()
 
             training_time = time.time() - start_time
@@ -157,7 +158,7 @@ class Trainer:
         self.logger.info('Training Loop ends')
         return model
 
-    def validate(self, ncel, lp, args,info):
+    def validate(self, ncel, lp, args, info):
         self.logger.info(f'{info}')
         ncel.eval()
         ncel_results = dict()
