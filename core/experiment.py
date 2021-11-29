@@ -47,8 +47,6 @@ class Experiment:
         self.describe_and_store()
         del kb
         gc.collect()
-        print('asd')
-        exit(1)
 
     def initialize_knowledge_base(self):
         self.logger.info(f"Knowledge Base being Initialized {self.args['path_knowledge_base']}")

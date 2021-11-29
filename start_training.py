@@ -33,7 +33,8 @@ if __name__ == '__main__':
                         default='/home/demir/Desktop/Softwares/DeepTunnellingForRefinementOperators/KGs/Family/family-benchmark_rich_background.owl',
                         help='The absolute path of a knowledge base required.')
     parser.add_argument("--path_lp", type=str,
-                        default="/home/demir/Desktop/Softwares/DeepTunnellingForRefinementOperators/LPs/Family/lp_dl_learner.json",
+                        #default="/home/demir/Desktop/Softwares/DeepTunnellingForRefinementOperators/LPs/Family/lp_dl_learner.json",
+                        default=None,
                         help='If None, examples are randomly generated')
     parser.add_argument("--dl_learner_binary_path", type=str, default='dllearner-1.4.0/')
     parser.add_argument('--num_workers', type=int, default=4, help='Number of cpus used during batching')
