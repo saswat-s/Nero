@@ -8,7 +8,7 @@ from owlapy.render import DLSyntaxObjectRenderer
 
 import random
 from collections import deque
-from .model import NCEL
+from .model import NERO
 
 import torch
 from torch import nn
@@ -37,19 +37,24 @@ class Trainer:
         self.logger = logger
         self.storage_path = self.args['storage_path']
 
-    def describe_configuration(self, model):
+    def describe_configuration(self, model, loss_func):
         """
         Describe the selected model and hyperparameters
+        :param loss_func:
         :param model:
         :return:
         """
-        self.logger.info(f'Training data size:{len(self.learning_problems)}\t'
-                         f'Number of Labels:{len(self.learning_problems.target_class_expressions)}')
-
-        num_param = sum([p.numel() for p in model.parameters()])
-        self.logger.info("Number of free parameters: {0}".format(num_param))
-        self.logger.info(model)
-
+        self.logger.info(f'|C|={self.args["num_named_classes"]}, '
+                         f'|I|={self.args["num_instances"]}, '
+                         f'|D|={len(self.learning_problems)}, '
+                         f'|T|:{len(self.learning_problems.target_class_expressions)}, '
+                         f'{model},d:{self.args["num_embedding_dim"]}, '
+                         f'|Theta|={sum([p.numel() for p in model.parameters()])}, '
+                         f'Loss={loss_func}, '
+                         f'NumEpoch={self.args["num_epochs"]}, '
+                         f'LR={self.args["learning_rate"]}, '
+                         f'BatchSize={self.args["batch_size"]}'
+        )
     def neural_architecture_selection(self):
         param = {'num_embedding_dim': self.args['num_embedding_dim'],
                  'num_instances': self.args['num_instances'],
@@ -65,7 +70,7 @@ class Trainer:
         else:
             raise NotImplementedError(f'There is no {arc} model implemented')
 
-        return NCEL(model=model,
+        return NERO(model=model,
                     quality_func=f_measure,
                     target_class_expressions=self.learning_problems.target_class_expressions,
                     instance_idx_mapping=self.learning_problems.instance_idx_mapping)
@@ -74,13 +79,11 @@ class Trainer:
 
         # (1) Initialize the model.
         model = self.neural_architecture_selection()
-        # (2) Describe the training setting.
-        self.describe_configuration(model)
         # (3) Initialize the training. MSE seemed to yield better results, less num of concepts explored
         loss_func = torch.nn.MSELoss()
         # loss_func = torch.nn.CrossEntropyLoss()
-
         optimizer = torch.optim.Adam(model.parameters(), lr=self.args['learning_rate'])
+
         """
         # DatasetWithOnFlyLabelling uses less memory but takes too much time although all cpus are used
         data_loader = torch.utils.data.DataLoader(DatasetWithOnFlyLabelling(self.learning_problems),
@@ -99,11 +102,15 @@ class Trainer:
         if self.args['num_epochs'] > 0:
             self.logger.info('Data being labelled')
             # (4) Initialize the mini-batch loader
-            data_loader = torch.utils.data.DataLoader(Dataset(self.learning_problems,num_workers_for_labelling=self.args['num_workers']),
-                                                      batch_size=self.args['batch_size'],
-                                                      num_workers=self.args['num_workers'], shuffle=True)
+            data_loader = torch.utils.data.DataLoader(
+                Dataset(self.learning_problems, num_workers_for_labelling=self.args['num_workers']),
+                batch_size=self.args['batch_size'],
+                num_workers=self.args['num_workers'], shuffle=True)
 
-            self.logger.info('Training starts')
+            self.logger.info('Description Training Setting')
+            # (2) Describe the training setting.
+            self.describe_configuration(model, loss_func)
+
             start_time = time.time()
             # For every some epochs, we should change the size of input
             for it in range(1, self.args['num_epochs'] + 1):
@@ -162,7 +169,7 @@ class Trainer:
         avg_runtime_ncel = np.array([i['Runtime'] for i in ncel_results.values()]).mean()
         avg_expression_ncel = np.array([i['NumClassTested'] for i in ncel_results.values()]).mean()
         self.logger.info(
-            f'Avg. F-measure NCEL:{avg_f1_ncel}\t Avg. Runtime:{avg_runtime_ncel}\t Avg. Expression Tested:{avg_expression_ncel} in {len(lp)} LPs ')
+            f'Avg. F-measure NERO:{avg_f1_ncel}\t Avg. Runtime:{avg_runtime_ncel}\t Avg. Expression Tested:{avg_expression_ncel} in {len(lp)} LPs ')
         self.logger.info('Validation Ends')
 
     def serialize_ncel(self, model):
@@ -176,7 +183,7 @@ class Trainer:
             plt.scatter(low_emb[:, 0], low_emb[:, 1])
             plt.show()
 
-    def start(self) -> NCEL:
+    def start(self) -> NERO:
         self.logger.info('Start the training phase')
         # (1) Training loop
         model = self.training_loop()

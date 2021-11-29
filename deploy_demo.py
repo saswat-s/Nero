@@ -7,7 +7,7 @@ import pandas as pd
 import torch
 import json
 import gradio as gr
-from core import NCEL, DeepSet, ST, TargetClassExpression, f_measure
+from core import NERO, DeepSet, ST, TargetClassExpression, f_measure
 from random import randint
 from argparse import ArgumentParser
 import random
@@ -73,13 +73,13 @@ def load_pytorch_module(args: Dict) -> torch.nn.Module:
     return model
 
 
-def load_ncel(args: Dict) -> NCEL:
+def load_ncel(args: Dict) -> NERO:
     # (2) Load target class expressions & instance_idx_mapping
     target_class_expressions, instance_idx_mapping = load_target_class_expressions_and_instance_idx_mapping(args)
     # (1) Load Pytorch Module
     model = load_pytorch_module(args)
 
-    model = NCEL(model=model,
+    model = NERO(model=model,
                  quality_func=f_measure,
                  target_class_expressions=target_class_expressions,
                  instance_idx_mapping=instance_idx_mapping)

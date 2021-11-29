@@ -10,7 +10,7 @@ from .static_funcs import apply_rho_on_rl_state
 import time
 
 
-class NCEL:
+class NERO:
     def __init__(self, model: torch.nn.Module,
                  quality_func,
                  target_class_expressions,
@@ -216,7 +216,7 @@ class NCEL:
         return sorted(results, key=lambda x: x[0], reverse=True), time.time() - start_time
 
     def __str__(self):
-        return f'NCEL with {self.model.name}'
+        return f'NERO with {self.model.name}'
 
     def train(self):
         self.model.train()

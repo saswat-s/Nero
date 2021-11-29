@@ -118,11 +118,6 @@ class Experiment:
         # (4) Store input settings
         save_as_json(storage_path=self.storage_path, obj=self.args, name='settings')
         # (5) Log details about input KB.
-        self.logger.info('Describe the experiment')
-        self.logger.info(
-            f'Number of named classes: {self.args["num_named_classes"]}\t'
-            f'Number of individuals: {self.args["num_instances"]}'
-        )
 
     def start(self):
         # (1) Train model
