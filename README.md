@@ -55,16 +55,12 @@ For each experiment, the following log info is stored.
 ```
 
 # Testing
-A pretrained model can be easily tested by providing two arguments as shown below
+A pretrained model stored in an experiment folder (2021-11-29 11:46:44.726916) can be easily tested on learning problems.
 ```sh
-path_knowledge_base="$PWD/Experiments/2021-11-29 10:40:26.076621"
-path_of_json_learning_problems="$PWD/LPs/Family/lp_dl_learner.json"
-python reproduce_experiments.py --path_of_experiment_folder "$path_knowledge_base" --path_of_json_learning_problems "$path_of_json_learning_problems"
-
+python reproduce_experiments.py --path_of_experiment_folder "$PWD/Experiments/2021-11-29 11:46:44.726916" --path_of_json_learning_problems "$PWD/LPs/Family/lp_dl_learner.json"
 sh test.sh
 ```
-
-We have also provided a test script for testing pretrained model on different datsets
+We have also provided a test script that facilitates testing a pretrained model on different datasets with different learning problems.
 ```sh
 sh test.sh
 ```
