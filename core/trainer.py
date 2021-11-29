@@ -33,9 +33,20 @@ class Trainer:
         # Input arguments
         self.args = args
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        # self.renderer = DLSyntaxObjectRenderer()
         self.logger = logger
         self.storage_path = self.args['storage_path']
+        self.logger.info(self)
+
+    def __str__(self):
+        return f'Trainer: |C|={self.args["num_named_classes"]},' \
+               f'|I|={self.args["num_instances"]},' \
+               f'|D|={len(self.learning_problems)},' \
+               f'|T|={len(self.learning_problems.target_class_expressions)},' \
+               f'd:{self.args["num_embedding_dim"]},' \
+               f'NumEpoch={self.args["num_epochs"]},' \
+               f'LR={self.args["learning_rate"]},' \
+               f'BatchSize={self.args["batch_size"]},' \
+               f'Device:{self.device}'
 
     def describe_configuration(self, model, loss_func):
         """
@@ -44,17 +55,10 @@ class Trainer:
         :param model:
         :return:
         """
-        self.logger.info(f'|C|={self.args["num_named_classes"]}, '
-                         f'|I|={self.args["num_instances"]}, '
-                         f'|D|={len(self.learning_problems)}, '
-                         f'|T|:{len(self.learning_problems.target_class_expressions)}, '
-                         f'{model},d:{self.args["num_embedding_dim"]}, '
+        self.logger.info(f'{model},d:{self.args["num_embedding_dim"]}, '
                          f'|Theta|={sum([p.numel() for p in model.parameters()])}, '
-                         f'Loss={loss_func}, '
-                         f'NumEpoch={self.args["num_epochs"]}, '
-                         f'LR={self.args["learning_rate"]}, '
-                         f'BatchSize={self.args["batch_size"]}'
-        )
+                         f'Loss={loss_func}')
+
     def neural_architecture_selection(self):
         param = {'num_embedding_dim': self.args['num_embedding_dim'],
                  'num_instances': self.args['num_instances'],
@@ -111,6 +115,7 @@ class Trainer:
             # (2) Describe the training setting.
             self.describe_configuration(model, loss_func)
 
+            num_val_lp=len(self.learning_problems)//10
             start_time = time.time()
             # For every some epochs, we should change the size of input
             for it in range(1, self.args['num_epochs'] + 1):
@@ -135,9 +140,9 @@ class Trainer:
                 # (7) Print-out
                 if it % printout_constant == 0:
                     self.logger.info(f'{it}.th epoch loss: {epoch_loss}')
-
                 if it % self.args['val_at_every_epochs'] == 0:
-                    self.validate(model, lp=self.learning_problems, args={'topK': 100})
+                    # At each time randomly sample 10% of the training data.
+                    self.validate(model, lp=random.choices(self.learning_problems,k=num_val_lp),args={'topK': 100},info='Validation on Training Data Starts')
                     model.train()
 
             training_time = time.time() - start_time
@@ -152,13 +157,14 @@ class Trainer:
         self.logger.info('Training Loop ends')
         return model
 
-    def validate(self, ncel, lp, args):
-        self.logger.info('Validation Starts')
+    def validate(self, ncel, lp, args,info):
+        self.logger.info(f'{info}')
         ncel.eval()
         ncel_results = dict()
 
         for _, (p, n) in enumerate(lp):
-            ncel_report = ncel.fit(pos=p, neg=n, topK=args['topK'], local_search=False)
+            with torch.no_grad():
+                ncel_report = ncel.fit(pos=p, neg=n, topK=args['topK'], local_search=False)
             ncel_report.update({'P': p, 'N': n, 'F-measure': f_measure(instances=ncel_report['Instances'],
                                                                        positive_examples=set(p),
                                                                        negative_examples=set(n)),
@@ -188,5 +194,4 @@ class Trainer:
         # (1) Training loop
         model = self.training_loop()
         self.serialize_ncel(model)
-
         return model

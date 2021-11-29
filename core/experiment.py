@@ -38,10 +38,8 @@ class Experiment:
         kb = self.initialize_knowledge_base()
         # (2) Initialize Training Data (D: {(E^+,E^-)})_i ^N
         self.lp = self.construct_targets_and_problems(kb)
-        self.logger.info(self.lp)
         # (4) Init Trainer
         self.trainer = Trainer(learning_problems=self.lp, args=self.args, logger=self.logger)
-        self.logger.info(self.trainer)
 
         self.instance_str = list(self.lp.instance_idx_mapping.keys())
         self.describe_and_store()
@@ -69,42 +67,44 @@ class Experiment:
             exit(1)
         return kb
 
-    def construct_targets_and_problems(self, kb):
+    def construct_targets_and_problems(self, kb: KnowledgeBase) -> LP:
         # (3) Initialize Learning problems
         target_class_expressions, instance_idx_mapping = select_target_expressions(kb, self.args, logger=self.logger)
         # e_pos, e_neg = generate_random_learning_problems(instance_idx_mapping, self.args)
         e_pos, e_neg = generate_learning_problems_from_targets(target_class_expressions, instance_idx_mapping,
-                                                               self.args)
-        return LP(e_pos=e_pos, e_neg=e_neg, instance_idx_mapping=instance_idx_mapping,
-                  target_class_expressions=target_class_expressions)
+                                                               self.args, logger=self.logger)
+        lp = LP(e_pos=e_pos, e_neg=e_neg, instance_idx_mapping=instance_idx_mapping,
+                target_class_expressions=target_class_expressions)
+        self.logger.info(lp)
+        return lp
 
-    def describe_and_store(self):
+    def describe_and_store(self) -> None:
         assert self.args['num_instances'] > 0
-        # Sanity checking
-        # cuda device
-        self.logger.info('Device:{0}'.format(self.trainer.device))
+        self.logger.info('Experimental Setting is being serialized.')
         if torch.cuda.is_available():
             self.logger.info('Name of selected Device:{0}'.format(torch.cuda.get_device_name(self.trainer.device)))
         # (1) Store Learning Problems
+        self.logger.info('Serialize Learning Problems.')
         save_as_json(storage_path=self.storage_path,
                      obj={i: {'Pos': e_pos, 'Neg': e_neg} for i, (e_pos, e_neg) in
                           enumerate(zip(self.lp.e_pos, self.lp.e_neg))},
                      name='training_learning_problems')
+        self.logger.info('Serialize Index of Instances.')
         # (2) Store Integer mapping of instance: index of individuals
         save_as_json(storage_path=self.storage_path,
                      obj=self.lp.instance_idx_mapping, name='instance_idx_mapping')
         # (3) Store Target Class Expressions with respective expression chain from T -> ... -> TargetExp
         # Instead of storing as list of objects, we can store targets as pandas dataframe
-
+        self.logger.info('Serialize Pandas Dataframe containing target expressions')
         df = pd.DataFrame([t.__dict__ for t in self.lp.target_class_expressions])
         df.to_csv(path_or_buf=self.storage_path + '/target_class_expressions.csv')
         # print(total_size(self.lp.target_class_expressions))
         # print(df.memory_usage(deep=True).sum())
         # Pandas require more memory than self.lp.target_class_expressions or our memory calculating of a list of
         # items in correct
-
         del df
         gc.collect()
+        self.logger.info('Serialize Targets as json.')
         save_as_json(storage_path=self.storage_path, obj={target_cl.label_id: {'label_id': target_cl.label_id,
                                                                                'name': target_cl.name,
                                                                                'expression_chain': target_cl.expression_chain,
@@ -120,7 +120,7 @@ class Experiment:
         # (5) Log details about input KB.
 
     def start(self):
-        # (1) Train model
+        # (1) Train model & Validate
         self.logger.info('Experiment starts')
         start_time = time.time()
         ncel = self.trainer.start()
@@ -137,7 +137,7 @@ class Experiment:
 
         self.logger.info(f'Total Runtime of the experiment:{time.time() - start_time}')
 
-    def evaluate(self, ncel, lp, args):
+    def evaluate(self, ncel, lp, args)->None:
         self.logger.info('Evaluation Starts')
 
         ncel_results = dict()
@@ -191,7 +191,7 @@ def select_target_expressions(kb, args, logger) -> Tuple[List[TargetClassExpress
     :param logger:
     :return: a list of target expressions and a dictionary of URI to integer index
     """
-    logger.info('Learning Problems being generated')
+    logger.info('Target Expressions being selected.')
     # (1) Individual to integer mapping
     instance_idx_mapping = {individual.get_iri().as_str(): i for i, individual in enumerate(kb.individuals())}
     number_of_target_expressions = args['number_of_target_expressions']
@@ -434,7 +434,7 @@ def random_target_expression_selection(kb, number_of_target_expressions, instanc
 
 def generate_learning_problems_from_targets(target_class_expressions: List[TargetClassExpression],
                                             instance_idx_mapping: Dict,
-                                            args: Dict) -> Tuple[List[int], List[int]]:
+                                            args: Dict, logger) -> Tuple[List[int], List[int]]:
     """
     Sample pos from targets
 
@@ -443,7 +443,7 @@ def generate_learning_problems_from_targets(target_class_expressions: List[Targe
     :param args:
     :return:
     """
-    random.seed(0)
+    logger.info('Learning Problems are being sampled from Targets')
     instances_idx_list = list(instance_idx_mapping.values())
 
     pos_examples = []
@@ -462,7 +462,6 @@ def generate_random_learning_problems(instance_idx_mapping: Dict,
     """
     Generate Learning problems
     :param instance_idx_mapping:
-    :param target_idx_individuals:
     :param args: hyperparameters
     :return: a list of ordered learning problems. Each inner list contains same amount of positive and negative
      examples

@@ -5,7 +5,7 @@ from owlapy.owlready2.temp_classes import OWLReasoner_Owlready2_TempClasses
 from owlapy.fast_instance_checker import OWLReasoner_FastInstanceChecker
 from .static_funcs import f_measure
 from multiprocessing import Pool
-from typing import List
+from typing import List, Iterable
 import numpy as np
 import itertools
 from owlapy.render import DLSyntaxObjectRenderer
@@ -23,7 +23,7 @@ class LP:
         self.target_class_expressions = target_class_expressions
 
     def __str__(self):
-        return f'<LP object at {hex(id(self))}>\tdata_points: {self.num_learning_problems}\t|target_class_expressions|:{len(self.target_class_expressions)}'
+        return f'<LP object at {hex(id(self))}>\t|D|: {self.num_learning_problems}\t|T|:{len(self.target_class_expressions)}'
 
     def __len__(self):
         return self.num_learning_problems
@@ -31,6 +31,18 @@ class LP:
     def __iter__(self):
         for pos, neg in zip(self.e_pos, self.e_neg):
             yield [self.idx_instance_mapping[i] for i in pos], [self.idx_instance_mapping[i] for i in neg]
+
+    def __getitem__(self, i):
+        if isinstance(i, Iterable):
+            res = []
+            for ith in i:
+                res.append(([self.idx_instance_mapping[_] for _ in self.e_pos[ith]],
+                            [self.idx_instance_mapping[_] for _ in self.e_neg[ith]]))
+            return res
+        else:
+            assert isinstance(i, int)
+            return [self.idx_instance_mapping[_] for _ in self.e_pos[i]], [self.idx_instance_mapping[i] for i in
+                                                                           self.e_neg[i]]
 
 
 def ClosedWorld_ReasonerFactory(onto: OWLOntology) -> OWLReasoner:

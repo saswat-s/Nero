@@ -19,7 +19,8 @@ class NERO:
         self.quality_func = quality_func
         self.target_class_expressions = target_class_expressions
         self.instance_idx_mapping = instance_idx_mapping
-        self.inverse_instance_idx_mapping=dict(zip(self.instance_idx_mapping.values(),self.instance_idx_mapping.keys()))
+        self.inverse_instance_idx_mapping = dict(
+            zip(self.instance_idx_mapping.values(), self.instance_idx_mapping.keys()))
         self.renderer = DLSyntaxObjectRenderer()
         self.max_top_k = len(self.target_class_expressions)
 
@@ -33,6 +34,7 @@ class NERO:
                             xneg=torch.LongTensor([[self.instance_idx_mapping[i] for i in neg]]))
         self.model(xpos, xneg)
         """
+
     def negative_embeddings(self, xpos):
         return self.model(xpos, xneg)
 
@@ -104,12 +106,12 @@ class NERO:
 
     def fit(self, pos: [str], neg: [str], topK: int, local_search=False) -> Dict:
         if topK is None:
-            topK=self.max_top_k
+            topK = self.max_top_k
         try:
             assert topK > 0
         except AssertionError:
             print(f'topK must be greater than 0. Currently:{topK}')
-            topK=self.max_top_k
+            topK = self.max_top_k
         start_time = time.time()
         goal_found = False
         try:
@@ -137,11 +139,12 @@ class NERO:
         set_str_neg = set(neg)
 
         for i in sort_idxs[:topK]:
-            str_instances={ self.inverse_instance_idx_mapping[i] for i in self.target_class_expressions[i].idx_individuals}
+            str_instances = {self.inverse_instance_idx_mapping[i] for i in
+                             self.target_class_expressions[i].idx_individuals}
             s: float = self.quality_func(
                 instances=str_instances,
                 positive_examples=set_str_pos, negative_examples=set_str_neg)
-            results.append((s, self.target_class_expressions[i],str_instances))
+            results.append((s, self.target_class_expressions[i], str_instances))
             if s == 1.0:
                 # print('Goal Found in the tunnelling')
                 goal_found = True
@@ -152,7 +155,7 @@ class NERO:
 
         num_expression_tested = len(results)
         results = sorted(results, key=lambda x: x[0], reverse=True)
-        f1, top_pred, top_str_instances= results[0]
+        f1, top_pred, top_str_instances = results[0]
 
         report = {'Prediction': top_pred.name,
                   'Instances': top_str_instances,
@@ -203,12 +206,13 @@ class NERO:
         set_pos = set(pos)
         set_neg = set(neg)
         for the_exploration, idx_target in enumerate(sort_idxs[:topK]):
-            str_instances={ self.inverse_instance_idx_mapping[_] for _ in self.target_class_expressions[idx_target].idx_individuals}
+            str_instances = {self.inverse_instance_idx_mapping[_] for _ in
+                             self.target_class_expressions[idx_target].idx_individuals}
 
             s: float = self.quality_func(
                 instances=str_instances,
                 positive_examples=set_pos, negative_examples=set_neg)
-            results.append((s, self.target_class_expressions[idx_target], str_instances,the_exploration+1))
+            results.append((s, self.target_class_expressions[idx_target], str_instances, the_exploration + 1))
             if s == 1.0:
                 # if goal found break it.
                 break
