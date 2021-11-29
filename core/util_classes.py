@@ -45,16 +45,20 @@ def ClosedWorld_ReasonerFactory(onto: OWLOntology) -> OWLReasoner:
 def compute_f1_target(target_class_expressions, pos, neg):
     pos = set(pos)
     neg = set(neg)
-    return [f_measure(instances=t.idx_individuals, positive_examples=pos, negative_examples=neg) for t in target_class_expressions]
+    return [f_measure(instances=t.idx_individuals, positive_examples=pos, negative_examples=neg) for t in
+            target_class_expressions]
 
 
 class Dataset(torch.utils.data.Dataset):
-    def __init__(self, lp: LP):
+    def __init__(self, lp: LP, num_workers_for_labelling: int):
+        if num_workers_for_labelling == 0:
+            num_workers_for_labelling = 1
         self.lp = lp
+        self.num_workers_for_labelling = num_workers_for_labelling
         self.num_data_points = len(self.lp)
         self.Y = []
         # This is quite memory expensive.
-        with Pool(processes=4) as pool:
+        with Pool(processes=self.num_workers_for_labelling) as pool:
             self.Y = list(
                 pool.starmap(compute_f1_target, ((self.lp.target_class_expressions, pos, neg) for (pos, neg) in
                                                  zip(self.lp.e_pos, self.lp.e_neg))))

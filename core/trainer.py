@@ -99,7 +99,7 @@ class Trainer:
         if self.args['num_epochs'] > 0:
             self.logger.info('Data being labelled')
             # (4) Initialize the mini-batch loader
-            data_loader = torch.utils.data.DataLoader(Dataset(self.learning_problems),
+            data_loader = torch.utils.data.DataLoader(Dataset(self.learning_problems,num_workers_for_labelling=self.args['num_workers']),
                                                       batch_size=self.args['batch_size'],
                                                       num_workers=self.args['num_workers'], shuffle=True)
 

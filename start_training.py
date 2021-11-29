@@ -37,7 +37,7 @@ if __name__ == '__main__':
                         default=None,
                         help='If None, examples are randomly generated')
     parser.add_argument("--dl_learner_binary_path", type=str, default='dllearner-1.4.0/')
-    parser.add_argument('--num_workers', type=int, default=4, help='Number of cpus used during batching')
+    parser.add_argument('--num_workers', type=int, default=0, help='Number of cpus used during batching')
 
     # Class Expression Learning
     parser.add_argument("--num_individual_per_example", type=int, default=10,
