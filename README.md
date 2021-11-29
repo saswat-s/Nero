@@ -14,6 +14,13 @@ git clone https://github.com/dice-group/DeepTunnellingForRefinementOperators
 conda env create -f environment.yml
 # Active virtual enviroment 
 conda activate deeptunnel
+# Install ontolearn library
+wget https://github.com/dice-group/Ontolearn/archive/refs/tags/0.4.0.zip
+unzip 0.4.0.zip
+cd Ontolearn-0.4.0
+python -c 'from setuptools import setup; setup()' develop
+python -c "import ontolearn"
+cd ..
 ```
 # Knowledge Bases and Learning Problems
 ```sh

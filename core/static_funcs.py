@@ -160,7 +160,7 @@ def save_as_json(*, storage_path=None, obj=None, name=None):
 def apply_rho_on_rl_state(rl_state, rho, kb):
     for i in rho.refine(rl_state.concept):
         next_rl_state = RL_State(i, parent_node=rl_state)
-        next_rl_state.length = kb.cl(next_rl_state.concept)
+        next_rl_state.length = kb.concept_len(next_rl_state.concept)
         next_rl_state.instances = set(kb.individuals(next_rl_state.concept))
         yield next_rl_state
 
@@ -172,7 +172,7 @@ def generate_target_class_expressions(lpg, kb, args):
     # Generate target_class_expressions
     target_class_expressions = set()
     rl_state = RL_State(kb.thing, parent_node=None, is_root=True)
-    rl_state.length = kb.cl(kb.thing)
+    rl_state.length = kb.concept_len(kb.thing)
     rl_state.instances = set(kb.individuals(rl_state.concept))
     target_class_expressions.add(rl_state)
     quantifiers = set()

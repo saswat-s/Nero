@@ -220,7 +220,7 @@ def select_target_expressions(kb, args, logger) -> Tuple[List[TargetClassExpress
 def target_expressions_via_refining_top(rho, kb, number_of_target_expressions, num_of_all_individuals,
                                         instance_idx_mapping):
     rl_state = RL_State(kb.thing, parent_node=None, is_root=True)
-    rl_state.length = kb.cl(kb.thing)
+    rl_state.length = kb.concept_len(kb.thing)
     rl_state.instances = set(kb.individuals(rl_state.concept))
     renderer = DLSyntaxObjectRenderer()
     target_class_expressions = set()
