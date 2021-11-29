@@ -135,8 +135,7 @@ def run(settings):
 if __name__ == '__main__':
     parser = ArgumentParser()
     # General
-    parser.add_argument("--path_of_experiments", type=str,
-                        default='/home/demir/Desktop/Softwares/DeepTunnellingForRefinementOperators/PretrainedModels/Family/2021-11-17 18:00:28.803967')
+    parser.add_argument("--path_of_experiments", type=str, default=None)
     # Inference Related
     parser.add_argument("--topK", type=int, default=1000,
                         help='Test the highest topK target expressions')

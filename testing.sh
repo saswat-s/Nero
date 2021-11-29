@@ -1,6 +1,6 @@
 # Path of an experiment folder
-path_knowledge_base="/home/demir/Desktop/Softwares/DeepTunnellingForRefinementOperators/Experiments/2021-11-29 09:46:31.872713"
-path_of_json_learning_problems="/home/demir/Desktop/Softwares/DeepTunnellingForRefinementOperators/LPs/Family/lp_dl_learner.json"
+path_knowledge_base="$PWD/Experiments/2021-11-29 10:40:26.076621"
+path_of_json_learning_problems="$PWD/LPs/Family/lp_dl_learner.json"
 echo "##################"
 echo "Evaluation Starts on DL-Learner Family benchmark learning problems"
 echo "KB Path: $path_knowledge_base"
@@ -8,7 +8,7 @@ python reproduce_experiments.py --path_of_experiment_folder "$path_knowledge_bas
 echo "Evaluation Ends"
 
 
-path_of_json_learning_problems="/home/demir/Desktop/Softwares/DeepTunnellingForRefinementOperators/LPs/Family/lp.json"
+path_knowledge_base="$PWD/Experiments/2021-11-29 10:40:26.076621"
 echo "##################"
 echo "Evaluation Starts on DRILL Family benchmark learning problems"
 echo "KB Path: $path_knowledge_base"
@@ -17,7 +17,7 @@ echo "Evaluation Ends"
 
 exit 1
 # Select Datasets and Embeddings
-path_knowledge_base="/home/demir/Desktop/Softwares/DeepTunnellingForRefinementOperators/KGs/Mutagenesis/mutagenesis.owl"
+path_knowledge_base="PWD/KGs/Mutagenesis/mutagenesis.owl"
 echo "##################"
 echo "Training Starts"
 echo "KB Path: $path_knowledge_base"
