@@ -1,11 +1,11 @@
 # Determine configurations
-number_of_target_expressions=1000
+number_of_target_expressions=10_000
 num_embedding_dim=25
 num_epochs=1000
 num_individual_per_example=10
 num_of_learning_problems_training=10 # |D|=|T| x num_of_learning_problems_training
 val_at_every_epochs=100
-num_workers=2
+num_workers=32
 
 # Select Dataset
 path_knowledge_base="$PWD/KGs/Family/family-benchmark_rich_background.owl"
