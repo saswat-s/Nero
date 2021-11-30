@@ -27,13 +27,13 @@ class NERO:
     def forward(self, *, xpos, xneg):
         return self.model(xpos, xneg)
 
-    def positive_embeddings_from_iterable_of_individuals(self, pos: Iterable[str]):
-        raise NotImplementedError()
-        """
-        pred = self.forward(xpos=torch.LongTensor([[self.instance_idx_mapping[i] for i in pos]]),
-                            xneg=torch.LongTensor([[self.instance_idx_mapping[i] for i in neg]]))
-        self.model(xpos, xneg)
-        """
+    def positive_expression_embeddings(self, individuals: Iterable[str]):
+        return self.model.positive_expression_embeddings(
+            torch.LongTensor([[self.instance_idx_mapping[i] for i in individuals]]))
+
+    def negative_expression_embeddings(self, individuals: Iterable[str]):
+        return self.model.negative_expression_embeddings(
+            torch.LongTensor([[self.instance_idx_mapping[i] for i in individuals]]))
 
     def negative_embeddings(self, xpos):
         return self.model(xpos, xneg)
@@ -212,12 +212,11 @@ class NERO:
             s: float = self.quality_func(
                 instances=str_instances,
                 positive_examples=set_pos, negative_examples=set_neg)
-            results.append((s, self.target_class_expressions[idx_target], str_instances, the_exploration + 1))
+            results.append((s, self.target_class_expressions[idx_target], str_instances))
             if s == 1.0:
                 # if goal found break it.
                 break
-
-        return sorted(results, key=lambda x: x[0], reverse=True), time.time() - start_time
+        return sorted(results, key=lambda x: x[0], reverse=True), len(results),time.time() - start_time
 
     def __str__(self):
         return f'NERO with {self.model.name}'

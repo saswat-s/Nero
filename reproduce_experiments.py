@@ -91,7 +91,7 @@ def predict(model, positive_examples, negative_examples):
         return model.predict(pos=positive_examples, neg=negative_examples)
 
 
-def run(settings, topK):
+def run(settings, topK:int):
     # (1) Load the configuration setting.
     with open(settings['path_of_experiment_folder'] + '/settings.json', 'r') as f:
         settings.update(json.load(f))
@@ -107,9 +107,9 @@ def run(settings, topK):
     runtimes = []
     tested_concepts = []
     for target_str_name, v in lp['problems'].items():
-        results, rt = ncel_model.predict(pos=v['positive_examples'], neg=v['negative_examples'], topK=topK)
+        results, num_explored_exp, rt = ncel_model.predict(pos=v['positive_examples'], neg=v['negative_examples'], topK=topK)
 
-        f1, target_concept, str_instances, num_explored_exp = results[0]
+        f1, target_concept, str_instances = results[0]
         tested_concepts.append(num_explored_exp)
         runtimes.append(rt)
         quality.append(f1)
@@ -125,12 +125,11 @@ if __name__ == '__main__':
     parser = ArgumentParser()
     # General
     # Repo Family
-    parser.add_argument("--path_of_experiment_folder", type=str,
-                        default='/home/demir/Desktop/Softwares/DeepTunnellingForRefinementOperators/Experiments/2021-11-27 09:35:37.213885')
-    parser.add_argument("--path_of_json_learning_problems", type=str,
-                        default='/home/demir/Desktop/Softwares/DeepTunnellingForRefinementOperators/LPs/Family/lp_dl_learner.json')
+    parser.add_argument("--path_of_experiment_folder", type=str, default=None)
+    parser.add_argument("--path_knowledge_base", type=str, default=None)
+    parser.add_argument("--path_of_json_learning_problems", type=str, default=None)
     # Inference Related
-    parser.add_argument("--topK", type=int, default=1000,
+    parser.add_argument("--topK", type=int, default=100,
                         help='Test the highest topK target expressions')
     d = vars(parser.parse_args())
     run(d, topK=d['topK'])

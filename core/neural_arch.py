@@ -41,11 +41,12 @@ class DeepSet(torch.nn.Module):
         xneg_score = self.fc1(torch.sum(self.embeddings(xneg), 1))
         return torch.sigmoid(xpos_score - xneg_score)
 
-    def get_pos_embeddings(self, xpos):
-        return self.fc0(torch.sum(self.embeddings(xpos), 1))
+    def positive_expression_embeddings(self, tensor_idx_individuals: torch.LongTensor):
+        return self.fc0(torch.sum(self.embeddings(tensor_idx_individuals), 1))
 
-    def get_neg_embeddings(self):
-        return self.fc1(torch.sum(self.embeddings(xneg), 1))
+    def negative_expression_embeddings(self, tensor_idx_individuals: torch.LongTensor):
+        return self.fc1(torch.sum(self.embeddings(tensor_idx_individuals), 1))
+
 
 class ST(torch.nn.Module):
     """
