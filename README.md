@@ -64,6 +64,11 @@ We have also provided a test script that facilitates testing a pretrained model 
 ```sh
 sh test.sh
 ```
+
+# Embeddings of Description Logic Expressions
+Here, we fit a regression model on 2D embeddings of 1-length expressions. 
+Despite the information loss incurred due to PCA, embeddings of 1-length expressions have a distinct structure.
+![alt text](core/figures/regplotfamily_plot.png)
 # Deployment
 To ease using pre-trained model, we provide an API.
 ```sh
@@ -71,8 +76,8 @@ python deploy_demo.py --path_of_experiments "$PWD/Experiments/2021-11-29 10:47:3
 # Few seconds later, pretrained model is deployed in a local server
 Running on local URL:  http://127.0.0.1:7860/
 ```
-![alt text](core/deploy_1.png)
-![alt text](core/deploy_2.png)
+![alt text](core/figures/deploy_1.png)
+![alt text](core/figures/deploy_2.png)
 
 
 # Integrate DL-Learner
