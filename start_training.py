@@ -30,7 +30,7 @@ if __name__ == '__main__':
     parser = ArgumentParser()
     # General
     parser.add_argument("--path_knowledge_base", type=str,
-                        default='/home/demir/Desktop/Softwares/DeepTunnellingForRefinementOperators/KGs/Family/family-benchmark_rich_background.owl',
+                        default='KGs/Family/family-benchmark_rich_background.owl',
                         help='The absolute path of a knowledge base required.')
     parser.add_argument("--path_lp", type=str,
                         default=None,
@@ -50,9 +50,12 @@ if __name__ == '__main__':
     parser.add_argument("--neural_architecture", type=str,
                         default='DeepSet',
                         help='[ST(Set Transformer),DeepSet]')
+    parser.add_argument("--quality_function_training", type=str,
+                        default='fmeasure',
+                        help='[accuracy,fmeasure]')
 
     parser.add_argument("--number_of_target_expressions", type=int,
-                        default=100,
+                        default=500,
                         help='Randomly select target class expressions as labels.')
 
     parser.add_argument("--target_expression_selection", type=str,
@@ -67,9 +70,9 @@ if __name__ == '__main__':
     # Training Related
     parser.add_argument("--learning_rate", type=int, default=.001, help='Learning Rate')
     parser.add_argument("--num_epochs", type=int, default=100, help='Number of iterations over the entire dataset.')
-    parser.add_argument("--val_at_every_epochs", type=int, default=25, help='How often eval.')
+    parser.add_argument("--val_at_every_epochs", type=int, default=50, help='How often eval.')
 
-    parser.add_argument("--batch_size", type=int, default=512)
+    parser.add_argument("--batch_size", type=int, default=256)
     # Inference Related
     parser.add_argument("--topK", type=int, default=1,
                         help='Test the highest topK target expressions')

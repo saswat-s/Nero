@@ -99,7 +99,7 @@ def launch_service(ncel_model):
             neg_str = negative_examples.split(",")
 
         with torch.no_grad():
-            results, run_time = ncel_model.predict(pos=pos_str, neg=neg_str, topK=100)
+            results, run_time = ncel_model.predict(str_pos=pos_str, str_neg=neg_str, topK=100)
         if len(pos_str) < 20:
             s = f'E^+:{",".join(pos_str)}\nE^-:{",".join(neg_str)}\n'
         else:

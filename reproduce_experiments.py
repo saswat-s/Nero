@@ -88,10 +88,10 @@ def load_ncel(args: Dict) -> NERO:
 
 def predict(model, positive_examples, negative_examples):
     with torch.no_grad():
-        return model.predict(pos=positive_examples, neg=negative_examples)
+        return model.predict(str_pos=positive_examples, str_neg=negative_examples)
 
 
-def run(settings, topK:int):
+def run(settings, topK: int):
     # (1) Load the configuration setting.
     with open(settings['path_of_experiment_folder'] + '/settings.json', 'r') as f:
         settings.update(json.load(f))
@@ -107,9 +107,12 @@ def run(settings, topK:int):
     runtimes = []
     tested_concepts = []
     for target_str_name, v in lp['problems'].items():
-        results, num_explored_exp, rt = ncel_model.predict(pos=v['positive_examples'], neg=v['negative_examples'], topK=topK)
+        results_que, num_explored_exp, rt = ncel_model.predict(str_pos=v['positive_examples'],
+                                                               str_neg=v['negative_examples'], topK=topK,
+                                                               local_search=False)
 
-        f1, target_concept, str_instances = results[0]
+        best_pred = results_que.get()
+        f1, target_concept, str_instances = best_pred.quality, best_pred.tce, best_pred.str_individuals
         tested_concepts.append(num_explored_exp)
         runtimes.append(rt)
         quality.append(f1)
@@ -125,9 +128,14 @@ if __name__ == '__main__':
     parser = ArgumentParser()
     # General
     # Repo Family
-    parser.add_argument("--path_of_experiment_folder", type=str, default=None)
-    parser.add_argument("--path_knowledge_base", type=str, default=None)
-    parser.add_argument("--path_of_json_learning_problems", type=str, default=None)
+    # (1) Folder containing pretrained models
+    folder_name = "Experiments"
+    # (3) Evaluate NERO on Family benchmark dataset by using learning problems provided in DL-Learner
+
+    # Path of an experiment folder
+    parser.add_argument("--path_of_experiment_folder", type=str, default='Experiments/2021-12-02 20:12:00.717064')
+    parser.add_argument("--path_knowledge_base", type=str, default='KGs/Family/family-benchmark_rich_background.owl')
+    parser.add_argument("--path_of_json_learning_problems", type=str, default='LPs/Family/lp_dl_learner.json')
     # Inference Related
     parser.add_argument("--topK", type=int, default=100,
                         help='Test the highest topK target expressions')

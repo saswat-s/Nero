@@ -14,7 +14,7 @@ from ontolearn.binders import DLLearnerBinder
 from .static_funcs import *
 from .util_classes import *
 from .trainer import Trainer
-
+from .dl_expression import TargetClassExpression
 import numpy as np
 import pandas as pd
 from collections import deque

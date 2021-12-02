@@ -37,12 +37,20 @@ class Trainer:
         self.storage_path = self.args['storage_path']
         self.logger.info(self)
 
+        if self.args['quality_function_training'] == 'accuracy':
+            self.quality_function = accuracy
+        elif self.args['quality_function_training'] == 'fmeasure':
+            self.quality_function = f_measure
+        else:
+            raise KeyError
+
     def __str__(self):
         return f'Trainer: |C|={self.args["num_named_classes"]},' \
                f'|I|={self.args["num_instances"]},' \
                f'|D|={len(self.learning_problems)},' \
                f'|T|={len(self.learning_problems.target_class_expressions)},' \
-               f'd:{self.args["num_embedding_dim"]},' \
+               f'd:{self.args["num_embedding_dim"]},'\
+               f'Quality func for training:{self.args["quality_function_training"]},'\
                f'NumEpoch={self.args["num_epochs"]},' \
                f'LR={self.args["learning_rate"]},' \
                f'BatchSize={self.args["batch_size"]},' \
@@ -75,7 +83,7 @@ class Trainer:
             raise NotImplementedError(f'There is no {arc} model implemented')
 
         return NERO(model=model,
-                    quality_func=f_measure,
+                    quality_func=self.quality_function,
                     target_class_expressions=self.learning_problems.target_class_expressions,
                     instance_idx_mapping=self.learning_problems.instance_idx_mapping)
 

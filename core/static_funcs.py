@@ -76,81 +76,6 @@ def using(point=""):
     return '''%s: usertime=%s systime=%s mem=%s mb ''' % (point, usage[0], usage[1], usage[2] / 1024.0)
 
 
-class TargetClassExpression_old:
-    def __init__(self, *, label_id: int, name: str, individuals: Set, idx_individuals: Set, expression_chain: List):
-        assert isinstance(label_id, int)
-        assert isinstance(name, str)
-        assert isinstance(individuals, frozenset)
-        assert isinstance(idx_individuals, frozenset)
-        assert isinstance(expression_chain, list)
-
-        self.label_id = label_id
-        self.name = name
-        self.individuals = individuals
-        self.idx_individuals = idx_individuals
-        self.expression_chain = expression_chain
-        assert len(self.individuals) == len(self.idx_individuals)
-        self.num_individuals = len(self.individuals)
-
-    def __str__(self):
-        return f'{self.name}\tIndv:{self.num_individuals}'
-
-    def __repr__(self):
-        return self.__str__()
-
-    def __mul__(self, other):
-        return TargetClassExpression(
-            label_id=-1,
-            name=f'({self.name}) ⊓ ({other.name})',
-            individuals=self.individuals.intersection(other.individuals),
-            idx_individuals=self.idx_individuals.intersection(other.idx_individuals),
-            expression_chain=self.expression_chain + [other.name])
-
-    def __add__(self, other):
-        return TargetClassExpression(
-            label_id=-2,
-            name=f'({self.name}) ⊔ ({other.name})',
-            individuals=self.individuals.union(other.individuals),
-            idx_individuals=self.idx_individuals.union(other.idx_individuals),
-            expression_chain=self.expression_chain + [other.name])
-
-
-class TargetClassExpression:
-    def __init__(self, *, label_id: int, name: str, idx_individuals: Set, expression_chain: List):
-        assert isinstance(label_id, int)
-        assert isinstance(name, str)
-        assert isinstance(idx_individuals, frozenset)
-        assert isinstance(expression_chain, list)
-
-        self.label_id = label_id
-        self.name = name
-        self.idx_individuals = idx_individuals
-        self.expression_chain = expression_chain
-        self.num_individuals = len(self.idx_individuals)
-    @property
-    def size(self):
-        return self.num_individuals
-
-    def __str__(self):
-        return f'{self.name}\tIndv:{self.num_individuals}'
-
-    def __repr__(self):
-        return self.__str__()
-
-    def __mul__(self, other):
-        return TargetClassExpression(
-            label_id=-1,
-            name=f'({self.name}) ⊓ ({other.name})',
-            idx_individuals=self.idx_individuals.intersection(other.idx_individuals),
-            expression_chain=self.expression_chain + [other.name])
-
-    def __add__(self, other):
-        return TargetClassExpression(
-            label_id=-2,
-            name=f'({self.name}) ⊔ ({other.name})',
-            idx_individuals=self.idx_individuals.union(other.idx_individuals),
-            expression_chain=self.expression_chain + [other.name])
-
 
 def save_as_json(*, storage_path=None, obj=None, name=None):
     with open(storage_path + f'/{name}.json', 'w') as file_descriptor:
@@ -227,6 +152,16 @@ def f_measure(*, instances: Set, positive_examples: Set, negative_examples: Set)
 
     f_1 = 2 * ((precision * recall) / (precision + recall))
     return f_1
+
+
+def accuracy(*, instances: Set, positive_examples: Set, negative_examples: Set):
+        tp = len(positive_examples.intersection(instances))
+        tn = len(negative_examples.difference(instances))
+
+        fp = len(negative_examples.intersection(instances))
+        fn = len(positive_examples.difference(instances))
+
+        return (tp + tn) / (tp+tn+fp+fn)
 
 
 def retrieve_concept_chain(rl_state: RL_State) -> List[RL_State]:

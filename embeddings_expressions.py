@@ -91,7 +91,7 @@ def load_nero(args: Dict) -> NERO:
 
 def predict(model, positive_examples, negative_examples):
     with torch.no_grad():
-        return model.predict(pos=positive_examples, neg=negative_examples)
+        return model.predict(str_pos=positive_examples, str_neg=negative_examples)
 
 
 def plot_image(length_2emb, length_2_uris, path_save_fig):
