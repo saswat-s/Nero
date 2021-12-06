@@ -3,7 +3,7 @@ from owlapy.model import OWLOntology, OWLReasoner
 from owlapy.owlready2 import OWLOntology_Owlready2
 from owlapy.owlready2.temp_classes import OWLReasoner_Owlready2_TempClasses
 from owlapy.fast_instance_checker import OWLReasoner_FastInstanceChecker
-from .static_funcs import f_measure
+from .static_funcs import compute_f1_target
 from multiprocessing import Pool
 from typing import List, Iterable
 import numpy as np
@@ -45,20 +45,6 @@ class LP:
                                                                            self.e_neg[i]]
 
 
-def ClosedWorld_ReasonerFactory(onto: OWLOntology) -> OWLReasoner:
-    assert isinstance(onto, OWLOntology_Owlready2)
-    base_reasoner = OWLReasoner_Owlready2_TempClasses(ontology=onto)
-    reasoner = OWLReasoner_FastInstanceChecker(ontology=onto,
-                                               base_reasoner=base_reasoner,
-                                               negation_default=True)
-    return reasoner
-
-
-def compute_f1_target(target_class_expressions, pos, neg):
-    pos = set(pos)
-    neg = set(neg)
-    return [f_measure(instances=t.idx_individuals, positive_examples=pos, negative_examples=neg) for t in
-            target_class_expressions]
 
 
 class Dataset(torch.utils.data.Dataset):

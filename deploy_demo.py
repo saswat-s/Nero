@@ -99,17 +99,14 @@ def launch_service(ncel_model):
             neg_str = negative_examples.split(",")
 
         with torch.no_grad():
-            results, run_time = ncel_model.predict(str_pos=pos_str, str_neg=neg_str, topK=100)
+            report = ncel_model.fit(str_pos=pos_str, str_neg=neg_str, topK=100)
         if len(pos_str) < 20:
             s = f'E^+:{",".join(pos_str)}\nE^-:{",".join(neg_str)}\n'
         else:
             s = f'|E^+|:{len(pos_str)}\n|E^-|:{len(neg_str)}\n'
-        values = []
-        for ith, (f1, target_concept, str_instances, num_exp) in enumerate(results[:10]):
-            # s += f'{ith + 1}. {target_concept.name}\t F1-score:{f1:.2f}\n'
-            values.append([ith + 1, target_concept.name, round(f1, 3)])
 
-        return s, pd.DataFrame(values, columns=['Rank', 'Exp.', 'F1-measure'])
+        report.pop('Instances')
+        return s,pd.DataFrame([report])
 
     gr.Interface(
         fn=predict,
@@ -117,7 +114,7 @@ def launch_service(ncel_model):
                 gr.inputs.Textbox(lines=5, placeholder=None, label='Negative Examples'),
                 gr.inputs.Slider(minimum=1, maximum=100),
                 "checkbox"],
-        outputs=[gr.outputs.Textbox(label='Learning Problem'), gr.outputs.Dataframe(label='Predictions')],
+        outputs=[gr.outputs.Textbox(label='Learning Problem'),gr.outputs.Dataframe(label='Predictions')],
         title='Rapid Induction of Description Logic Expressions via Nero',
         description='Click Random Examples & Submit.').launch()
 
@@ -135,9 +132,9 @@ def run(settings):
 if __name__ == '__main__':
     parser = ArgumentParser()
     # General
-    parser.add_argument("--path_of_experiments", type=str, default=None)
+    parser.add_argument("--path_of_experiments", type=str, default='ExperimentsLarge/NeroFamily')
     # Inference Related
-    parser.add_argument("--topK", type=int, default=1000,
+    parser.add_argument("--topK", type=int, default=10_0000,
                         help='Test the highest topK target expressions')
 
     settings = vars(parser.parse_args())

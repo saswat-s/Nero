@@ -6,13 +6,14 @@ class State:
     def __init__(self, quality: float, tce: TargetClassExpression, str_individuals: set):
         self.quality = quality
         self.tce = tce
+        self.name=self.tce.name
         self.str_individuals = str_individuals
 
     def __lt__(self, other):
         return self.quality < other.quality
 
     def __str__(self):
-        return f'Quality:{self.quality} | Expression:{self.tce}'
+        return f'{self.tce} | Quality:{self.quality:.3f}'
 
 
 class ExpressionQueue:
@@ -46,3 +47,28 @@ class ExpressionQueue:
             self.current_length -= 1
             mps = self.get()
             yield mps.quality, mps.tce, mps.str_individuals
+
+
+class SearchTree:
+    def __init__(self):
+        self.items_in_queue = PriorityQueue()
+        self.gate=set()
+
+    def put(self, expression):
+        if expression not in self.gate:
+            # The lowest valued entries are retrieved first
+            self.items_in_queue.put((-expression.quality, expression))
+            self.gate.add(expression)
+
+    def get(self):
+        _, expression = self.items_in_queue.get()
+        self.gate.remove(expression)
+        return expression
+
+    def __len__(self):
+        return len(self.gate)
+
+    def __iter__(self):
+        while len(self.gate) > 0:
+            # most promising state
+            yield self.get()

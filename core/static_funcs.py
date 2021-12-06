@@ -23,6 +23,19 @@ try:
 except ImportError:
     pass
 
+import torch
+from owlapy.model import OWLOntology, OWLReasoner
+from owlapy.owlready2 import OWLOntology_Owlready2
+from owlapy.owlready2.temp_classes import OWLReasoner_Owlready2_TempClasses
+from owlapy.fast_instance_checker import OWLReasoner_FastInstanceChecker
+
+def ClosedWorld_ReasonerFactory(onto: OWLOntology) -> OWLReasoner:
+    assert isinstance(onto, OWLOntology_Owlready2)
+    base_reasoner = OWLReasoner_Owlready2_TempClasses(ontology=onto)
+    reasoner = OWLReasoner_FastInstanceChecker(ontology=onto,
+                                               base_reasoner=base_reasoner,
+                                               negation_default=True)
+    return reasoner
 
 def total_size(o, handlers={}, verbose=False):
     """ Returns the approximate memory footprint an object and all of its contents.
@@ -98,7 +111,7 @@ def generate_target_class_expressions(lpg, kb, args):
     target_class_expressions = set()
     rl_state = RL_State(kb.thing, parent_node=None, is_root=True)
     rl_state.length = kb.concept_len(kb.thing)
-    rl_state.instances = set(kb.individuals(rl_state.concept))
+    rl_state.instances = set(kb.str_individuals(rl_state.concept))
     target_class_expressions.add(rl_state)
     quantifiers = set()
     for i in lpg.apply_rho_on_rl_state(rl_state):
@@ -129,6 +142,11 @@ def generate_target_class_expressions(lpg, kb, args):
 
     return target_class_expressions, target_individuals
 
+def compute_f1_target(target_class_expressions, pos, neg):
+    pos = set(pos)
+    neg = set(neg)
+    return [f_measure(instances=t.idx_individuals, positive_examples=pos, negative_examples=neg) for t in
+            target_class_expressions]
 
 def f_measure(*, instances: Set, positive_examples: Set, negative_examples: Set):
     tp = len(positive_examples.intersection(instances))

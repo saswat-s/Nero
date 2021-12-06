@@ -386,7 +386,7 @@ def random_target_expression_selection(kb, number_of_target_expressions, instanc
     target_class_expressions = set()
     rl_state = RL_State(kb.thing, parent_node=None, is_root=True)
     rl_state.length = kb.cl(kb.thing)
-    rl_state.instances = set(kb.individuals(rl_state.concept))
+    rl_state.instances = set(kb.str_individuals(rl_state.concept))
     target_class_expressions.add(rl_state)
     quantifiers = set()
 

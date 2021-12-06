@@ -1,6 +1,7 @@
 """
 Deploy our approach
 """
+import os
 from typing import Dict
 import torch
 import json
@@ -11,9 +12,19 @@ import random
 import numpy as np
 import pandas as pd
 from core.static_funcs import *
+from core.data_struct import ExpressionQueue
+from core.static_funcs import ClosedWorld_ReasonerFactory
+from core.dl_learner_binder import DLLearnerBinder
+
+from ontolearn import KnowledgeBase
+from owlapy.model import OWLEquivalentClassesAxiom, OWLClass, IRI, OWLObjectIntersectionOf, OWLObjectUnionOf, \
+    OWLObjectSomeValuesFrom, OWLObjectInverseOf, OWLObjectProperty, OWLThing
+import itertools
+from typing import Iterable, Dict, List, Any
+import pandas
 
 
-def load_target_class_expressions_and_instance_idx_mapping(args):
+def load_target_class_expressions_and_instance_idx_mapping(path_of_experiment_folder):
     """
 
     :param args:
@@ -21,7 +32,7 @@ def load_target_class_expressions_and_instance_idx_mapping(args):
     """
     # target_class_expressions Must be empty and must be filled in an exactorder
     target_class_expressions = []
-    with open(args['path_of_experiment_folder'] + '/target_class_expressions.json', 'r') as f:
+    with open(path_of_experiment_folder + '/target_class_expressions.json', 'r') as f:
         for k, v in json.load(f).items():
             k: str  # k denotes k.th label of target expression, json loading type conversion from int to str appreantly
             v: dict  # v contains info for Target Class Expression Object
@@ -50,15 +61,15 @@ def load_target_class_expressions_and_instance_idx_mapping(args):
             target_class_expressions.append(t)
 
     instance_idx_mapping = dict()
-    with open(args['path_of_experiment_folder'] + '/instance_idx_mapping.json', 'r') as f:
+    with open(path_of_experiment_folder + '/instance_idx_mapping.json', 'r') as f:
         instance_idx_mapping.update(json.load(f))
     return target_class_expressions, instance_idx_mapping
 
 
-def load_pytorch_module(args: Dict) -> torch.nn.Module:
+def load_pytorch_module(args: Dict, path_of_experiment_folder) -> torch.nn.Module:
     """ Load weights and initialize pytorch module"""
     # (1) Load weights from experiment repo
-    weights = torch.load(args['path_of_experiment_folder'] + '/final_model.pt', torch.device('cpu'))
+    weights = torch.load(path_of_experiment_folder + '/final_model.pt', torch.device('cpu'))
     if args['neural_architecture'] == 'DeepSet':
         model = DeepSet(args)
     elif args['neural_architecture'] == 'ST':
@@ -72,11 +83,17 @@ def load_pytorch_module(args: Dict) -> torch.nn.Module:
     return model
 
 
-def load_ncel(args: Dict) -> NERO:
+def load_ncel(path_of_experiment_folder: str) -> NERO:
+    # (1) Load the configuration setting.
+    settings = dict()
+    with open(path_of_experiment_folder + '/settings.json', 'r') as f:
+        settings.update(json.load(f))
+
     # (2) Load target class expressions & instance_idx_mapping
-    target_class_expressions, instance_idx_mapping = load_target_class_expressions_and_instance_idx_mapping(args)
+    target_class_expressions, instance_idx_mapping = load_target_class_expressions_and_instance_idx_mapping(
+        path_of_experiment_folder)
     # (1) Load Pytorch Module
-    model = load_pytorch_module(args)
+    model = load_pytorch_module(settings, path_of_experiment_folder)
 
     model = NERO(model=model,
                  quality_func=f_measure,
@@ -91,37 +108,102 @@ def predict(model, positive_examples, negative_examples):
         return model.predict(str_pos=positive_examples, str_neg=negative_examples)
 
 
-def run(settings, topK: int):
-    # (1) Load the configuration setting.
-    with open(settings['path_of_experiment_folder'] + '/settings.json', 'r') as f:
-        settings.update(json.load(f))
+def search(settings):
+    kb = KnowledgeBase(path=settings['path_knowledge_base'],
+                       reasoner_factory=ClosedWorld_ReasonerFactory)
 
-    # (2) Load the Pytorch Module.
-    ncel_model = load_ncel(settings)
+    def l(x):
+        return [_ for _ in kb.reasoner().sub_classes(x, direct=True)]
 
-    # (3) Load Learning Problems
-    lp = dict()
-    with open(settings['path_of_json_learning_problems'], 'r') as f:
-        lp.update(json.load(f))
-    quality = []
-    runtimes = []
-    tested_concepts = []
-    for target_str_name, v in lp['problems'].items():
-        results_que, num_explored_exp, rt = ncel_model.predict(str_pos=v['positive_examples'],
-                                                               str_neg=v['negative_examples'], topK=topK,
-                                                               local_search=False)
+    for i in l(kb.thing):
+        print('top:', i)
+        for j in l(i):
+            print(j)
 
-        best_pred = results_que.get()
-        f1, target_concept, str_instances = best_pred.quality, best_pred.tce, best_pred.str_individuals
-        tested_concepts.append(num_explored_exp)
-        runtimes.append(rt)
-        quality.append(f1)
+    for i in kb.all_individuals_set():
+        print(i)
+        for j in kb.reasoner().types(i):
+            print(j)
 
-    quality = np.array(quality)
-    runtimes = np.array(runtimes)
-    tested_concepts = np.array(tested_concepts)
+    for i in itertools.chain(kb.ontology().object_properties_in_signature(),
+                             kb.ontology().data_properties_in_signature()):
+        print(i)
+
+    kb = KnowledgeBase(path='KGs/Family/family-benchmark_rich_background.owl')
+    NS = "http://www.benchmark.org/family#"
+
+    manager = kb.ontology().get_owl_ontology_manager()
+    # name of new class
+    cls_a: OWLClass = OWLClass(IRI.create(NS, "MyEnrichedClass"))
+    # example concept
+    concept_a = OWLObjectUnionOf((OWLClass(IRI(NS, 'Brother')), OWLClass(IRI(NS, 'Father'))))
+    manager.add_axiom(kb.ontology(), OWLEquivalentClassesAxiom(cls_a, concept_a))
+
+    # save as new rdfxml file
+    manager.save_ontology(kb.ontology(), IRI.create("file:/", "demir_family_new_onto.owl"))
+
+    kb = KnowledgeBase(path='demir_family_new_onto.owl',
+                       reasoner_factory=ClosedWorld_ReasonerFactory)
+
+    print('asd')
+    for i in kb.all_individuals_set():
+        print(i)
+        for j in kb.reasoner().types(i):
+            print(j, end=', ')
+    exit(1)
+
+    def l(x):
+        return [_ for _ in kb.reasoner().sub_classes(x, direct=True)]
+
+    for i in l(kb.thing):
+        for x in kb.reasoner().equivalent_classes(i):
+            print(x, 'equivalen', i)
+
+
+def report_model_results(results, name):
+    results = pd.DataFrame.from_dict(results)
     print(
-        f'F-measure:{quality.mean():.3f} +- {quality.std():.3f} \t Num Exp. Expressions: {tested_concepts.mean():.3f} +- {tested_concepts.std():.3f}\tRuntimes: {runtimes.mean():.3f} +- {runtimes.std():.3f} in {len(lp["problems"])} learning problems')
+        f'{name}: F-measure:{results["F-measure"].mean():.3f}+-{results["F-measure"].std():.3f}\t'
+        f'NumClassTested:{results["NumClassTested"].mean():.3f}+-{results["NumClassTested"].std():.3f}\t'
+        f'Runtime:{results["Runtime"].mean():.3f}+-{results["Runtime"].std():.3f}')
+
+
+def run(args):
+    path_knowledge_base = args.path_knowledge_base
+    path_dl_learner = args.path_dl_learner
+    path_of_json_learning_problems = args.path_of_json_learning_problems
+    ncel_model = load_ncel(args.path_of_experiment_folder)
+
+    lp = dict()
+    with open(path_of_json_learning_problems, 'r') as f:
+        lp.update(json.load(f))
+
+    nero_results = []
+    celoe_results = []
+    eltl_results = []
+    # Initialize models
+    celoe = DLLearnerBinder(binary_path=path_dl_learner, kb_path=path_knowledge_base, model='celoe')
+    eltl = DLLearnerBinder(binary_path=path_dl_learner, kb_path=path_knowledge_base, model='eltl')
+    # {'Prediction': 'Sister ⊔ (Female ⊓ (¬Granddaughter))', 'Accuracy': 0.7927, 'F-measure': 0.8283, 'NumClassTested': 3906, 'Runtime': 6.361}
+    for target_str_name, v in lp['problems'].items():
+        # OUR MODEL
+        print('Nero Fit')
+        nero_results.append(
+            ncel_model.fit(str_pos=v['positive_examples'], str_neg=v['negative_examples'],
+                           topK=args.topK,
+                           use_search=args.use_search, kb_path=args.path_knowledge_base))
+        print('Celoe Fit')
+        celoe_results.append(celoe.fit(pos=v['positive_examples'], neg=v['negative_examples'],
+                                       max_runtime=args.max_runtime_dl_learner).best_hypothesis())
+        print('ELTL Fit')
+        eltl_results.append(eltl.fit(pos=v['positive_examples'], neg=v['negative_examples'],
+                                     max_runtime=args.max_runtime_dl_learner).best_hypothesis())
+        if len(nero_results) == 2:
+            break
+    # Later save into folder
+    report_model_results(nero_results, name='NERO')
+    report_model_results(celoe_results, name='CELOE')
+    report_model_results(eltl_results, name='ELTL')
 
 
 if __name__ == '__main__':
@@ -133,11 +215,15 @@ if __name__ == '__main__':
     # (3) Evaluate NERO on Family benchmark dataset by using learning problems provided in DL-Learner
 
     # Path of an experiment folder
-    parser.add_argument("--path_of_experiment_folder", type=str, default='Experiments/2021-12-02 20:12:00.717064')
-    parser.add_argument("--path_knowledge_base", type=str, default='KGs/Family/family-benchmark_rich_background.owl')
+    parser.add_argument("--path_of_experiment_folder", type=str, default='ExperimentsLarge/NeroFamily')
+    parser.add_argument("--path_knowledge_base", type=str,
+                        default=os.getcwd() + '/KGs/Family/family-benchmark_rich_background.owl')
     parser.add_argument("--path_of_json_learning_problems", type=str, default='LPs/Family/lp_dl_learner.json')
     # Inference Related
     parser.add_argument("--topK", type=int, default=100,
                         help='Test the highest topK target expressions')
-    d = vars(parser.parse_args())
-    run(d, topK=d['topK'])
+    parser.add_argument("--path_dl_learner", type=str, default=os.getcwd() + '/dllearner-1.4.0/')
+    parser.add_argument("--max_runtime_dl_learner", type=int, default=0)
+    parser.add_argument('--use_search', default='Continues', help='Continues, Refinement,None')
+
+    run(parser.parse_args())
