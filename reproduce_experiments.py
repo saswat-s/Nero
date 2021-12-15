@@ -171,6 +171,7 @@ def report_model_results(results, name):
 def run(args):
     path_knowledge_base = args.path_knowledge_base
     path_dl_learner = args.path_dl_learner
+    path_dl_learner = None
     path_of_json_learning_problems = args.path_of_json_learning_problems
     ncel_model = load_ncel(args.path_of_experiment_folder)
 
@@ -182,28 +183,26 @@ def run(args):
     celoe_results = []
     eltl_results = []
     # Initialize models
-    celoe = DLLearnerBinder(binary_path=path_dl_learner, kb_path=path_knowledge_base, model='celoe')
-    eltl = DLLearnerBinder(binary_path=path_dl_learner, kb_path=path_knowledge_base, model='eltl')
+    if path_dl_learner:
+        celoe = DLLearnerBinder(binary_path=path_dl_learner, kb_path=path_knowledge_base, model='celoe')
+        eltl = DLLearnerBinder(binary_path=path_dl_learner, kb_path=path_knowledge_base, model='eltl')
     # {'Prediction': 'Sister ⊔ (Female ⊓ (¬Granddaughter))', 'Accuracy': 0.7927, 'F-measure': 0.8283, 'NumClassTested': 3906, 'Runtime': 6.361}
     for target_str_name, v in lp['problems'].items():
         # OUR MODEL
-        print('Nero Fit')
         nero_results.append(
             ncel_model.fit(str_pos=v['positive_examples'], str_neg=v['negative_examples'],
                            topK=args.topK,
                            use_search=args.use_search, kb_path=args.path_knowledge_base))
-        print('Celoe Fit')
-        celoe_results.append(celoe.fit(pos=v['positive_examples'], neg=v['negative_examples'],
-                                       max_runtime=args.max_runtime_dl_learner).best_hypothesis())
-        print('ELTL Fit')
-        eltl_results.append(eltl.fit(pos=v['positive_examples'], neg=v['negative_examples'],
-                                     max_runtime=args.max_runtime_dl_learner).best_hypothesis())
-        if len(nero_results) == 2:
-            break
+        if path_dl_learner:
+            celoe_results.append(celoe.fit(pos=v['positive_examples'], neg=v['negative_examples'],
+                                           max_runtime=args.max_runtime_dl_learner).best_hypothesis())
+            eltl_results.append(eltl.fit(pos=v['positive_examples'], neg=v['negative_examples'],
+                                         max_runtime=args.max_runtime_dl_learner).best_hypothesis())
     # Later save into folder
     report_model_results(nero_results, name='NERO')
-    report_model_results(celoe_results, name='CELOE')
-    report_model_results(eltl_results, name='ELTL')
+    if path_dl_learner:
+        report_model_results(celoe_results, name='CELOE')
+        report_model_results(eltl_results, name='ELTL')
 
 
 if __name__ == '__main__':
@@ -215,15 +214,17 @@ if __name__ == '__main__':
     # (3) Evaluate NERO on Family benchmark dataset by using learning problems provided in DL-Learner
 
     # Path of an experiment folder
-    parser.add_argument("--path_of_experiment_folder", type=str, default='ExperimentsLarge/NeroFamily')
-    parser.add_argument("--path_knowledge_base", type=str,
-                        default=os.getcwd() + '/KGs/Family/family-benchmark_rich_background.owl')
-    parser.add_argument("--path_of_json_learning_problems", type=str, default='LPs/Family/lp_dl_learner.json')
+    parser.add_argument("--path_of_experiment_folder")
+    parser.add_argument("--path_knowledge_base")
+    parser.add_argument("--path_of_json_learning_problems", type=str)
     # Inference Related
-    parser.add_argument("--topK", type=int, default=100,
+    parser.add_argument("--topK", type=int, default=1000,
                         help='Test the highest topK target expressions')
-    parser.add_argument("--path_dl_learner", type=str, default=os.getcwd() + '/dllearner-1.4.0/')
+    parser.add_argument("--path_dl_learner", type=str,
+                        default=None
+                        # default=os.getcwd() + '/dllearner-1.4.0/'
+                        )
     parser.add_argument("--max_runtime_dl_learner", type=int, default=0)
-    parser.add_argument('--use_search', default='Continues', help='Continues, Refinement,None')
+    parser.add_argument('--use_search', default='Continues', help='Continues,None')
 
     run(parser.parse_args())

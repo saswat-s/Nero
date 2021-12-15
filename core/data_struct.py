@@ -6,7 +6,7 @@ class State:
     def __init__(self, quality: float, tce: TargetClassExpression, str_individuals: set):
         self.quality = quality
         self.tce = tce
-        self.name=self.tce.name
+        self.name = self.tce.name
         self.str_individuals = str_individuals
 
     def __lt__(self, other):
@@ -52,7 +52,7 @@ class ExpressionQueue:
 class SearchTree:
     def __init__(self):
         self.items_in_queue = PriorityQueue()
-        self.gate=set()
+        self.gate = set()
 
     def put(self, expression):
         if expression not in self.gate:
@@ -69,6 +69,5 @@ class SearchTree:
         return len(self.gate)
 
     def __iter__(self):
-        while len(self.gate) > 0:
-            # most promising state
-            yield self.get()
+        return (exp for q,exp in self.items_in_queue.queue)
+

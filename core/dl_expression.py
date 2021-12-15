@@ -64,6 +64,8 @@ class ClassExpression:
     def __lt__(self, other):
         return self.quality < other.quality
 
+
+
     def __mul__(self, other):
         return ClassExpression(
             name=f'({self.name}) ⊓ ({other.name})',

@@ -150,6 +150,8 @@ class NERO:
     def fit(self, str_pos: [str], str_neg: [str], topK: int = None, use_search=None, kb_path=None) -> Dict:
         """
 
+        :param kb_path:
+        :param use_search:
         :param kb:
         :param str_pos: string rep of E^+
         :param str_neg: string rep of E^+
@@ -163,45 +165,45 @@ class NERO:
         idx_pos = self.str_to_index_mapping(str_pos)
         idx_neg = self.str_to_index_mapping(str_neg)
         goal_found = False
-
         # (2) Initialize a priority queue for top K Target Expressions.
+        # st = SearchTree()
         st = SearchTree()
+
         # (3) Predict scores and sort index target expressions in descending order of assigned scores.
         _, sort_idxs = torch.sort(self.forward(xpos=torch.LongTensor([idx_pos]),
                                                xneg=torch.LongTensor([idx_neg])), dim=1, descending=True)
         sort_idxs = sort_idxs.cpu().numpy()[0]
         # (4) Iterate over the sorted index of target expressions.
-        exploration = 0
         for i, idx_target in enumerate(sort_idxs[:topK]):
-            exploration = i
-            # (4.1.) Retrieval of instance.
+            # (5) Retrieval of instance.
             str_instances = self.retrieval_of_individuals(self.target_class_expressions[idx_target])
-
+            # (6) Compute Quality.
             quality_score = self.call_quality_function(set_str_individual=str_instances,
                                                        set_str_pos=set_pos,
                                                        set_str_neg=set_neg)
-
+            # (7) Put CE into the priority queue.
             st.put(ClassExpression(name=self.target_class_expressions[idx_target].name,
                                    str_individuals=str_instances,
                                    expression_chain=self.target_class_expressions[idx_target].expression_chain,
                                    quality=quality_score))
-
+            # (8) If goal is found, we do not need to compute scores.
             if quality_score == 1.0:
                 goal_found = True
                 break
 
-        if goal_found is False:
+        # (9) IF goal is not found, we do search
+        if goal_found is False and use_search=='Continues':
+            best_pred = st.get()
+            st.put(best_pred)
+            self.apply_continues_search(st, set_pos, set_neg, topK)
+            best_constructed_expression = st.get()
+            if best_constructed_expression > best_pred:
+                best_pred = best_constructed_expression
+            exploration = len(st)
+        else:
+            exploration = len(st)
+            best_pred = max(st, key=lambda x: x.quality)
 
-            if use_search == 'Continues':
-                st = self.apply_contiunes_search(st, set_pos, set_neg)
-            elif use_search == 'Refinement':
-                kb = KnowledgeBase(path=kb_path,
-                                   reasoner_factory=ClosedWorld_ReasonerFactory)
-                st = self.apply_combinatorial_local_search(kb, st, set_pos, set_neg)
-            else:
-                " Do nothing"
-        exploration += len(st)
-        best_pred = st.get()
         f1, name, str_instances = best_pred.quality, best_pred.name, best_pred.str_individuals
         report = {'Prediction': best_pred.name,
                   'Instances': str_instances,
@@ -217,29 +219,28 @@ class NERO:
                                      expression_chain=expression_chain)
         return expression
 
-    def apply_contiunes_search(self, most_promissing_states, set_str_pos: Set[str], set_str_neg: Set[str]):
+    def apply_continues_search(self, top_states, set_str_pos: Set[str], set_str_neg: Set[str], topK: int):
         """
 
         :param kb:
-        :param most_promissing_states:
+        :param top_states:
         :param set_str_pos:
         :param set_str_neg:
         :return:
         """
-
-        result = SearchTree()
-        # (1) Get embeddings of E^+
-        # (2) Get embeddings of E^+
+        # (1) Get embeddings of E^+.
         pos_emb = self.positive_expression_embeddings(set_str_pos)
+        # (2) Get embeddings of E^-.
         neg_emb = self.negative_expression_embeddings(set_str_neg)
         last_sim = None
         st = []
         small = []
-        for i in most_promissing_states:
-            result.put(i)
+        # (3) Iterate over most promising states and compute similarity scores between E^+ and E^-
+        for i in top_states:
             st.append(i)
-
+            # (4) Embedding of most promising state
             target_emb = self.positive_expression_embeddings(i.str_individuals)
+            # (5) Compute MSE Loss between | ((4) -neg_emb) - pos_emb|
             sim = torch.nn.functional.mse_loss(input=target_emb - neg_emb, target=pos_emb)
             if last_sim is None:
                 last_sim = sim
@@ -247,8 +248,6 @@ class NERO:
             if sim < last_sim:
                 small.append(i)
                 last_sim = sim
-
-        assert len(result) == (len(st))
 
         for i in small:
             for j in st:
@@ -259,15 +258,14 @@ class NERO:
                                                             set_str_pos=set_str_pos,
                                                             set_str_neg=set_str_neg)
                 if i_or_j.quality > i.quality:
-                    result.put(i_or_j)
+                    top_states.put(i_or_j)
 
                 i_and_j = i * j
                 i_and_j.quality = self.call_quality_function(set_str_individual=i_and_j.str_individuals,
                                                              set_str_pos=set_str_pos,
                                                              set_str_neg=set_str_neg)
                 if i_and_j.quality > i.quality:
-                    result.put(i_and_j)
-        return result
+                    top_states.put(i_and_j)
 
     def apply_combinatorial_local_search(self, kb: KnowledgeBase, most_promissing_states, set_str_pos: Set[str],
                                          set_str_neg: Set[str]):

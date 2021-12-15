@@ -173,7 +173,7 @@ class Trainer:
 
         for _, (p, n) in enumerate(lp):
             with torch.no_grad():
-                ncel_report = ncel.fit(pos=p, neg=n, topK=args['topK'], local_search=False)
+                ncel_report = ncel.fit(str_pos=p, str_neg=n, topK=args['topK'])
             ncel_report.update({'P': p, 'N': n, 'F-measure': f_measure(instances=ncel_report['Instances'],
                                                                        positive_examples=set(p),
                                                                        negative_examples=set(n)),
