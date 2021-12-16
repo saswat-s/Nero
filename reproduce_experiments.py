@@ -164,14 +164,15 @@ def report_model_results(results, name):
     results = pd.DataFrame.from_dict(results)
     print(
         f'{name}: F-measure:{results["F-measure"].mean():.3f}+-{results["F-measure"].std():.3f}\t'
-        f'NumClassTested:{results["NumClassTested"].mean():.3f}+-{results["NumClassTested"].std():.3f}\t'
-        f'Runtime:{results["Runtime"].mean():.3f}+-{results["Runtime"].std():.3f}')
+                f'Runtime:{results["Runtime"].mean():.3f}+-{results["Runtime"].std():.3f}\t'
+        f'NumClassTested:{results["NumClassTested"].mean():.3f}+-{results["NumClassTested"].std():.3f}'
+    )
 
 
 def run(args):
     path_knowledge_base = args.path_knowledge_base
     path_dl_learner = args.path_dl_learner
-    path_dl_learner = None
+    #path_dl_learner=None
     path_of_json_learning_problems = args.path_of_json_learning_problems
     ncel_model = load_ncel(args.path_of_experiment_folder)
 
@@ -214,17 +215,17 @@ if __name__ == '__main__':
     # (3) Evaluate NERO on Family benchmark dataset by using learning problems provided in DL-Learner
 
     # Path of an experiment folder
-    parser.add_argument("--path_of_experiment_folder")
+    parser.add_argument("--path_of_experiment_folder",default='PretrainedNero/NeroFamily')
     parser.add_argument("--path_knowledge_base")
-    parser.add_argument("--path_of_json_learning_problems", type=str)
+    parser.add_argument("--path_of_json_learning_problems", default='LPs/Family/lp_dl_learner.json')
     # Inference Related
-    parser.add_argument("--topK", type=int, default=1000,
+    parser.add_argument("--topK", type=int, default=100,
                         help='Test the highest topK target expressions')
     parser.add_argument("--path_dl_learner", type=str,
                         default=None
                         # default=os.getcwd() + '/dllearner-1.4.0/'
                         )
     parser.add_argument("--max_runtime_dl_learner", type=int, default=0)
-    parser.add_argument('--use_search', default='Continues', help='Continues,None')
+    parser.add_argument('--use_search', default='None', help='Continues,IntersectNegatives,None')
 
     run(parser.parse_args())

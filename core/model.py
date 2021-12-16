@@ -36,6 +36,8 @@ class NERO:
 
         self.set_str_all_instances = set(list(self.instance_idx_mapping.keys()))
 
+        self.retrieve_counter = 0
+
     def get_target_exp_found_in_chain(self, expression_chain):
         for i in expression_chain:
             if i in self.str_target_class_expression_to_label_id:
@@ -43,6 +45,7 @@ class NERO:
 
     def call_quality_function(self, *, set_str_individual: Set[str], set_str_pos: Set[str],
                               set_str_neg: Set[str]) -> float:
+        self.retrieve_counter += 1
         return self.quality_func(instances=set_str_individual, positive_examples=set_str_pos,
                                  negative_examples=set_str_neg)
 
@@ -159,22 +162,25 @@ class NERO:
         :param local_search: Return a queue of top ranked expressions sorted as descending order of qualities
         :return:
         """
+        # (1) Initialize Learning Problem.
         start_time = time.time()
         self.predict_sanity_checking(pos=str_pos, neg=str_neg, topK=topK)
+        self.retrieve_counter = 0
         set_pos, set_neg = set(str_pos), set(str_neg)
         idx_pos = self.str_to_index_mapping(str_pos)
         idx_neg = self.str_to_index_mapping(str_neg)
         goal_found = False
+
         # (2) Initialize a priority queue for top K Target Expressions.
-        # st = SearchTree()
-        st = SearchTree()
+        top_prediction_queue = SearchTree()
 
         # (3) Predict scores and sort index target expressions in descending order of assigned scores.
         _, sort_idxs = torch.sort(self.forward(xpos=torch.LongTensor([idx_pos]),
                                                xneg=torch.LongTensor([idx_neg])), dim=1, descending=True)
         sort_idxs = sort_idxs.cpu().numpy()[0]
+
         # (4) Iterate over the sorted index of target expressions.
-        for i, idx_target in enumerate(sort_idxs[:topK]):
+        for idx_target in sort_idxs[:topK]:
             # (5) Retrieval of instance.
             str_instances = self.retrieval_of_individuals(self.target_class_expressions[idx_target])
             # (6) Compute Quality.
@@ -182,33 +188,67 @@ class NERO:
                                                        set_str_pos=set_pos,
                                                        set_str_neg=set_neg)
             # (7) Put CE into the priority queue.
-            st.put(ClassExpression(name=self.target_class_expressions[idx_target].name,
-                                   str_individuals=str_instances,
-                                   expression_chain=self.target_class_expressions[idx_target].expression_chain,
-                                   quality=quality_score))
+            top_prediction_queue.put(ClassExpression(name=self.target_class_expressions[idx_target].name,
+                                                     str_individuals=str_instances,
+                                                     expression_chain=self.target_class_expressions[
+                                                         idx_target].expression_chain,
+                                                     quality=quality_score))
+
             # (8) If goal is found, we do not need to compute scores.
             if quality_score == 1.0:
                 goal_found = True
                 break
 
         # (9) IF goal is not found, we do search
-        if goal_found is False and use_search=='Continues':
-            best_pred = st.get()
-            st.put(best_pred)
-            self.apply_continues_search(st, set_pos, set_neg, topK)
-            best_constructed_expression = st.get()
-            if best_constructed_expression > best_pred:
-                best_pred = best_constructed_expression
-            exploration = len(st)
+        if goal_found is False:
+            if use_search == 'Continues':
+                best_pred = top_prediction_queue.get()
+                top_prediction_queue.put(best_pred)
+                self.apply_continues_search(top_prediction_queue, set_pos, set_neg)
+                best_constructed_expression = top_prediction_queue.get()
+                if best_constructed_expression > best_pred:
+                    best_pred = best_constructed_expression
+            elif use_search == 'IntersectNegatives':
+                # Let t \in Top, m \in Least
+                # Assumption
+                # (1) \for all i in E^+ t(i)=1 and \exist i in E^- t(i)=1
+                # (2) \for all i in E^- m(i)=1 and \exist i in E^+ m(i)=1
+                # (3) Intersect m and take AND
+                st_to_intersect = SearchTree()
+
+                topK_lowest_predictions = sort_idxs[-10:]
+                for idx_target in topK_lowest_predictions:
+                    # (5) Retrieval of instance. and negate it
+                    str_instances = self.set_str_all_instances - self.retrieval_of_individuals(
+                        self.target_class_expressions[idx_target])
+                    # (6) Compute Quality.
+                    quality_score = self.call_quality_function(set_str_individual=str_instances,
+                                                               set_str_pos=set_pos,
+                                                               set_str_neg=set_neg)
+                    # (7) Put CE into the priority queue.
+                    st_to_intersect.put(
+                        ClassExpression(name='Neg(' + self.target_class_expressions[idx_target].name + ')',
+                                        str_individuals=str_instances,
+                                        expression_chain=self.target_class_expressions[idx_target].expression_chain + [
+                                            'NEG'],
+                                        quality=quality_score))
+                results = self.apply_continues_search_with_negatives(top_prediction_queue, st_to_intersect, set_pos,
+                                                                     set_neg)
+                best_pred = results.get()
+            elif use_search == 'None':
+                # best_pred = max(top_prediction_queue, key=lambda x: x.quality)
+                best_pred = top_prediction_queue.get()
+            else:
+                raise KeyError
+                """ Random """
         else:
-            exploration = len(st)
-            best_pred = max(st, key=lambda x: x.quality)
+            best_pred = top_prediction_queue.get()
 
         f1, name, str_instances = best_pred.quality, best_pred.name, best_pred.str_individuals
         report = {'Prediction': best_pred.name,
                   'Instances': str_instances,
                   'F-measure': f1,
-                  'NumClassTested': exploration,
+                  'NumClassTested': self.retrieve_counter,
                   'Runtime': time.time() - start_time,
                   }
         return report
@@ -219,7 +259,7 @@ class NERO:
                                      expression_chain=expression_chain)
         return expression
 
-    def apply_continues_search(self, top_states, set_str_pos: Set[str], set_str_neg: Set[str], topK: int):
+    def apply_continues_search(self, top_states, set_str_pos: Set[str], set_str_neg: Set[str]):
         """
 
         :param kb:
@@ -228,6 +268,8 @@ class NERO:
         :param set_str_neg:
         :return:
         """
+        num_explore_concepts = len(top_states) // 10
+        max_size = len(top_states) + num_explore_concepts
         # (1) Get embeddings of E^+.
         pos_emb = self.positive_expression_embeddings(set_str_pos)
         # (2) Get embeddings of E^-.
@@ -259,6 +301,8 @@ class NERO:
                                                             set_str_neg=set_str_neg)
                 if i_or_j.quality > i.quality:
                     top_states.put(i_or_j)
+                    if len(top_states) == max_size:
+                        break
 
                 i_and_j = i * j
                 i_and_j.quality = self.call_quality_function(set_str_individual=i_and_j.str_individuals,
@@ -266,6 +310,39 @@ class NERO:
                                                              set_str_neg=set_str_neg)
                 if i_and_j.quality > i.quality:
                     top_states.put(i_and_j)
+                    if len(top_states) == max_size:
+                        break
+            if len(top_states) == max_size:
+                break
+        assert len(top_states) <= max_size
+
+    def apply_continues_search_with_negatives(self, top_states, st_to_intersect, set_str_pos: Set[str],
+                                              set_str_neg: Set[str]):
+        """
+
+        :param kb:
+        :param top_states:
+        :param set_str_pos:
+        :param set_str_neg:
+        :return:
+        """
+        st = SearchTree()
+        result = SearchTree()
+        for i in top_states:
+            for j in st_to_intersect:
+                i_and_j = i * j
+                i_and_j.quality = self.call_quality_function(set_str_individual=i_and_j.str_individuals,
+                                                             set_str_pos=set_str_pos,
+                                                             set_str_neg=set_str_neg)
+                st.put(i_and_j)
+                if len(st) == top_states:
+                    break
+            if len(st) == top_states:
+                break
+        result.extend_queue(st)
+        result.extend_queue(top_states)
+
+        return result
 
     def apply_combinatorial_local_search(self, kb: KnowledgeBase, most_promissing_states, set_str_pos: Set[str],
                                          set_str_neg: Set[str]):

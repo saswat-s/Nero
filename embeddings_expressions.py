@@ -9,6 +9,7 @@ from argparse import ArgumentParser
 import random
 import numpy as np
 import pandas as pd
+from ontolearn import KnowledgeBase
 from core.static_funcs import *
 from sklearn.decomposition import PCA
 import seaborn as sns
@@ -99,20 +100,6 @@ def plot_image(length_2emb, length_2_uris, path_save_fig):
     sns.regplot(x=low_emb[:, 0], y=low_emb[:, 1])
     for (n, emb) in zip(length_2_uris, low_emb):
         plt.annotate(n, (emb[0], emb[1]))
-    """
-    for (n, emb) in zip(length_2_uris, low_emb):
-        if n in ['Granddaughter','Daughter','Sister','Grandmother','Mother','Female']:
-            """"""
-            plt.scatter(emb[0], emb[1], c='b')
-        elif n in ['Grandfather','Grandson','Son','Brother','Father','Male']:
-            """"""
-            plt.scatter(emb[0], emb[1], c='b')
-        else:
-            plt.scatter(emb[0], emb[1], c='b')
-        plt.annotate(n, (emb[0], emb[1]))
-    """
-
-    plt.ylim(-1000, 1100)
     plt.xlabel('First Component')
     plt.ylabel('Second Component')
     plt.savefig('regplot' + path_save_fig)
@@ -121,21 +108,27 @@ def plot_image(length_2emb, length_2_uris, path_save_fig):
 
 
 @torch.no_grad()
-def run(settings):
+def run(args):
+    settings=dict()
+    settings.update(args)
     # (1) Load the configuration setting.
     with open(settings['path_of_experiment_folder'] + '/settings.json', 'r') as f:
         settings.update(json.load(f))
 
     instance_idx_mapping = dict()
-    # (1) Load the configuration setting.
+    # (2) Load the configuration setting.
     with open(settings['path_of_experiment_folder'] + '/instance_idx_mapping.json', 'r') as f:
         instance_idx_mapping.update(json.load(f))
 
     id_to_str_individuals = dict(zip(instance_idx_mapping.values(), instance_idx_mapping.keys()))
-
-    # (2) Load the Pytorch Module.
+    # (3) Load the Pytorch Module.
     pre_trained_nero = load_nero(settings)
 
+    kb = KnowledgeBase(path=args['path_knowledge_base'],
+                       reasoner_factory=ClosedWorld_ReasonerFactory)
+
+    rho = LengthBasedRefinement(knowledge_base=kb)
+    exit(1)
     length_2_uris = []
     length_2emb = []
 
@@ -143,6 +136,8 @@ def run(settings):
     length_3emb = []
     for tcl in pre_trained_nero.target_class_expressions:
         tcl: TargetClassExpression
+        print(tcl.name)
+
         if len(tcl.name.split()) == 1 and ('¬' not in tcl.name):
             str_individuals = [id_to_str_individuals[_] for _ in tcl.idx_individuals]
             pos_emb = pre_trained_nero.positive_expression_embeddings(
@@ -155,9 +150,6 @@ def run(settings):
                 str_individuals).cpu().detach().numpy().flatten()
             length_3emb.append(pos_emb)
             length_3_uris.append(tcl.name)
-        elif len(tcl.name.split()) == 3:
-            """ Do nothing """
-            print(tcl.name)
         else:
             """ Do nothing """
 
@@ -170,6 +162,9 @@ if __name__ == '__main__':
     # General
     # Repo Family
     parser.add_argument("--path_of_experiment_folder", type=str,
-                        default='/home/demir/Desktop/Softwares/DeepTunnellingForRefinementOperators/PretrainedModels/Family/2021-11-17 18:00:28.803967')
+                        default='PretrainedNero/NeroFamily')
+
+    parser.add_argument("--path_knowledge_base", type=str,
+                        default='KGs/Family/Family.owl')
 
     run(vars(parser.parse_args()))

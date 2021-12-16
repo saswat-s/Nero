@@ -40,7 +40,7 @@ class TargetClassExpression:
 
 
 class ClassExpression:
-    def __init__(self, *, name: str, str_individuals: Set, expression_chain: List,quality=None):
+    def __init__(self, *, name: str, str_individuals: Set, expression_chain: List, quality=None):
         assert isinstance(name, str)
         assert isinstance(str_individuals, set)
         assert isinstance(expression_chain, list)
@@ -56,15 +56,10 @@ class ClassExpression:
         return self.num_individuals
 
     def __str__(self):
-        if self.quality:
-            return f'{self.name} | Indv:{self.num_individuals} | Quality:{self.quality}'
-        else:
-            return f'{self.name} | Indv:{self.num_individuals}'
+        return f'CLassExpression at {hex(id(self))} | {self.name} | Indv:{self.num_individuals} | Quality:{self.quality}'
 
     def __lt__(self, other):
         return self.quality < other.quality
-
-
 
     def __mul__(self, other):
         return ClassExpression(

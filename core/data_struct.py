@@ -69,5 +69,12 @@ class SearchTree:
         return len(self.gate)
 
     def __iter__(self):
-        return (exp for q,exp in self.items_in_queue.queue)
+        return (exp for q, exp in self.items_in_queue.queue)
 
+    def extend_queue(self, other) -> None:
+        """
+        Extend queue with other queue.
+        :param other:
+        """
+        for i in other:
+            self.put(i)

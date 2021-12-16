@@ -30,12 +30,12 @@ def run(args):
 if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument("--path_knowledge_base", type=str,
-                        default=os.getcwd() + '/KGs/Carcinogenesis/carcinogenesis.owl')
+                        default=os.getcwd() + '/KGs/Mutagenesis/Mutagenesis.owl')
     # Neural related
     parser.add_argument("--lp_gen_technique", type=str,
                         default='Random')
 
     parser.add_argument("--num_learning_problems", type=int, default=50)
-    parser.add_argument("--num_individuals_in_input_set", type=int, default=5)
+    parser.add_argument("--num_individuals_in_input_set", type=int, default=1)
 
     run(parser.parse_args())
