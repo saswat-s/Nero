@@ -1,5 +1,5 @@
 from queue import PriorityQueue
-from .dl_expression import TargetClassExpression
+from .expression import TargetClassExpression
 
 
 class State:

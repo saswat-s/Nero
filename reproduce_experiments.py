@@ -16,6 +16,7 @@ from core.data_struct import ExpressionQueue
 from core.static_funcs import ClosedWorld_ReasonerFactory
 from core.dl_learner_binder import DLLearnerBinder
 
+
 from ontolearn import KnowledgeBase
 from owlapy.model import OWLEquivalentClassesAxiom, OWLClass, IRI, OWLObjectIntersectionOf, OWLObjectUnionOf, \
     OWLObjectSomeValuesFrom, OWLObjectInverseOf, OWLObjectProperty, OWLThing
@@ -23,91 +24,7 @@ import itertools
 from typing import Iterable, Dict, List, Any
 import pandas
 
-
-def load_target_class_expressions_and_instance_idx_mapping(path_of_experiment_folder):
-    """
-
-    :param args:
-    :return:
-    """
-    # target_class_expressions Must be empty and must be filled in an exactorder
-    target_class_expressions = []
-    with open(path_of_experiment_folder + '/target_class_expressions.json', 'r') as f:
-        for k, v in json.load(f).items():
-            k: str  # k denotes k.th label of target expression, json loading type conversion from int to str appreantly
-            v: dict  # v contains info for Target Class Expression Object
-            assert isinstance(k, str)
-            assert isinstance(v, dict)
-            try:
-                k = int(k)
-            except ValueError:
-                print(k)
-                print('Tried to convert to int')
-                exit(1)
-            try:
-
-                assert k == v['label_id']
-            except AssertionError:
-                print(k)
-                print(v['label_id'])
-                exit(1)
-
-            t = TargetClassExpression(label_id=v['label_id'],
-                                      name=v['name'],
-                                      idx_individuals=frozenset(v['idx_individuals']),
-                                      expression_chain=v['expression_chain'])
-            assert len(t.idx_individuals) == len(v['idx_individuals'])
-
-            target_class_expressions.append(t)
-
-    instance_idx_mapping = dict()
-    with open(path_of_experiment_folder + '/instance_idx_mapping.json', 'r') as f:
-        instance_idx_mapping.update(json.load(f))
-    return target_class_expressions, instance_idx_mapping
-
-
-def load_pytorch_module(args: Dict, path_of_experiment_folder) -> torch.nn.Module:
-    """ Load weights and initialize pytorch module"""
-    # (1) Load weights from experiment repo
-    weights = torch.load(path_of_experiment_folder + '/final_model.pt', torch.device('cpu'))
-    if args['neural_architecture'] == 'DeepSet':
-        model = DeepSet(args)
-    elif args['neural_architecture'] == 'ST':
-        model = ST(args)
-    else:
-        raise NotImplementedError('There is no other model')
-    model.load_state_dict(weights)
-    for parameter in model.parameters():
-        parameter.requires_grad = False
-    model.eval()
-    return model
-
-
-def load_ncel(path_of_experiment_folder: str) -> NERO:
-    # (1) Load the configuration setting.
-    settings = dict()
-    with open(path_of_experiment_folder + '/settings.json', 'r') as f:
-        settings.update(json.load(f))
-
-    # (2) Load target class expressions & instance_idx_mapping
-    target_class_expressions, instance_idx_mapping = load_target_class_expressions_and_instance_idx_mapping(
-        path_of_experiment_folder)
-    # (1) Load Pytorch Module
-    model = load_pytorch_module(settings, path_of_experiment_folder)
-
-    model = NERO(model=model,
-                 quality_func=f_measure,
-                 target_class_expressions=target_class_expressions,
-                 instance_idx_mapping=instance_idx_mapping)
-    model.eval()
-    return model
-
-
-def predict(model, positive_examples, negative_examples):
-    with torch.no_grad():
-        return model.predict(str_pos=positive_examples, str_neg=negative_examples)
-
-
+"""
 def search(settings):
     kb = KnowledgeBase(path=settings['path_knowledge_base'],
                        reasoner_factory=ClosedWorld_ReasonerFactory)
@@ -158,13 +75,109 @@ def search(settings):
     for i in l(kb.thing):
         for x in kb.reasoner().equivalent_classes(i):
             print(x, 'equivalen', i)
+"""
+
+
+def load_target_class_expressions_and_instance_idx_mapping(path_of_experiment_folder):
+    """
+
+    :param args:
+    :return:
+    """
+    # target_class_expressions Must be empty and must be filled in an exactorder
+    target_class_expressions = []
+    df = pd.read_csv(path_of_experiment_folder + '/target_class_expressions.csv', index_col=0)
+    for index, v in df.iterrows():
+        t = TargetClassExpression(label_id=v['label_id'],
+                                  name=v['name'],
+                                  idx_individuals=eval(v['idx_individuals']),
+                                  expression_chain=eval(v['expression_chain']))
+        assert len(t.idx_individuals) == len(eval(v['idx_individuals']))
+
+        target_class_expressions.append(t)
+    """
+    with open(path_of_experiment_folder + '/target_class_expressions.json', 'r') as f:
+        for k, v in json.load(f).items():
+            k: str  # k denotes k.th label of target expression, json loading type conversion from int to str appreantly
+            v: dict  # v contains info for Target Class Expression Object
+            assert isinstance(k, str)
+            assert isinstance(v, dict)
+            try:
+                k = int(k)
+            except ValueError:
+                print(k)
+                print('Tried to convert to int')
+                exit(1)
+            try:
+
+                assert k == v['label_id']
+            except AssertionError:
+                print(k)
+                print(v['label_id'])
+                exit(1)
+
+            t = TargetClassExpression(label_id=v['label_id'],
+                                      name=v['name'],
+                                      idx_individuals=frozenset(v['idx_individuals']),
+                                      expression_chain=v['expression_chain'])
+            assert len(t.idx_individuals) == len(v['idx_individuals'])
+
+            target_class_expressions.append(t)
+    """
+
+    instance_idx_mapping = dict()
+    with open(path_of_experiment_folder + '/instance_idx_mapping.json', 'r') as f:
+        instance_idx_mapping.update(json.load(f))
+    return target_class_expressions, instance_idx_mapping
+
+
+def load_pytorch_module(args: Dict, path_of_experiment_folder) -> torch.nn.Module:
+    """ Load weights and initialize pytorch module"""
+    # (1) Load weights from experiment repo
+    weights = torch.load(path_of_experiment_folder + '/final_model.pt', torch.device('cpu'))
+    if args['neural_architecture'] == 'DeepSet':
+        model = DeepSet(args)
+    elif args['neural_architecture'] == 'ST':
+        model = ST(args)
+    else:
+        raise NotImplementedError('There is no other model')
+    model.load_state_dict(weights)
+    for parameter in model.parameters():
+        parameter.requires_grad = False
+    model.eval()
+    return model
+
+
+def load_ncel(path_of_experiment_folder: str) -> NERO:
+    # (1) Load the configuration setting.
+    settings = dict()
+    with open(path_of_experiment_folder + '/settings.json', 'r') as f:
+        settings.update(json.load(f))
+
+    # (2) Load target class expressions & instance_idx_mapping
+    target_class_expressions, instance_idx_mapping = load_target_class_expressions_and_instance_idx_mapping(
+        path_of_experiment_folder)
+    # (1) Load Pytorch Module
+    model = load_pytorch_module(settings, path_of_experiment_folder)
+
+    model = NERO(model=model,
+                 quality_func=f_measure,
+                 target_class_expressions=target_class_expressions,
+                 instance_idx_mapping=instance_idx_mapping)
+    model.eval()
+    return model
+
+
+def predict(model, positive_examples, negative_examples):
+    with torch.no_grad():
+        return model.predict(str_pos=positive_examples, str_neg=negative_examples)
 
 
 def report_model_results(results, name):
     results = pd.DataFrame.from_dict(results)
     print(
         f'{name}: F-measure:{results["F-measure"].mean():.3f}+-{results["F-measure"].std():.3f}\t'
-                f'Runtime:{results["Runtime"].mean():.3f}+-{results["Runtime"].std():.3f}\t'
+        f'Runtime:{results["Runtime"].mean():.3f}+-{results["Runtime"].std():.3f}\t'
         f'NumClassTested:{results["NumClassTested"].mean():.3f}+-{results["NumClassTested"].std():.3f}'
     )
 
@@ -172,7 +185,7 @@ def report_model_results(results, name):
 def run(args):
     path_knowledge_base = args.path_knowledge_base
     path_dl_learner = args.path_dl_learner
-    #path_dl_learner=None
+    # path_dl_learner=None
     path_of_json_learning_problems = args.path_of_json_learning_problems
     ncel_model = load_ncel(args.path_of_experiment_folder)
 
@@ -215,7 +228,10 @@ if __name__ == '__main__':
     # (3) Evaluate NERO on Family benchmark dataset by using learning problems provided in DL-Learner
 
     # Path of an experiment folder
-    parser.add_argument("--path_of_experiment_folder",default='PretrainedNero/NeroFamily')
+    parser.add_argument("--path_of_experiment_folder",
+                        #default='PretrainedNero/NeroFamily'
+                        default='Experiments/2021-12-17 18:25:04.430643'
+                        )
     parser.add_argument("--path_knowledge_base")
     parser.add_argument("--path_of_json_learning_problems", default='LPs/Family/lp_dl_learner.json')
     # Inference Related

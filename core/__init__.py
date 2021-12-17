@@ -1,4 +1,4 @@
 from .model import *
 from .neural_arch import *
 from .static_funcs import *
-from .dl_expression import TargetClassExpression
+from .expression import TargetClassExpression,ClassExpression

@@ -30,7 +30,7 @@ if __name__ == '__main__':
     parser = ArgumentParser()
     # General
     parser.add_argument("--path_knowledge_base", type=str,
-                        default='KGs/Family/family-benchmark_rich_background.owl',
+                        default='KGs/Family/Family.owl',
                         help='The absolute path of a knowledge base required.')
     parser.add_argument("--path_lp", type=str,
                         default=None,

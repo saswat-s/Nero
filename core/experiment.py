@@ -14,7 +14,7 @@ from ontolearn.binders import DLLearnerBinder
 from .static_funcs import *
 from .util_classes import *
 from .trainer import Trainer
-from .dl_expression import TargetClassExpression
+from .expression import TargetClassExpression
 import numpy as np
 import pandas as pd
 from collections import deque
@@ -33,10 +33,9 @@ class Experiment:
         self.storage_path, _ = create_experiment_folder(folder_name='Experiments')
         self.logger = create_logger(name='Experimenter', p=self.storage_path)
         self.args['storage_path'] = self.storage_path
-
         # (2) Initialize KB.
         kb = self.initialize_knowledge_base()
-        # (2) Initialize Training Data (D: {(E^+,E^-)})_i ^N .
+        # (3) Initialize Training Data (D: {(E^+,E^-)})_i ^N .
         self.lp = self.construct_targets_and_problems(kb)
         # (4) Init Trainer.
         self.trainer = Trainer(learning_problems=self.lp, args=self.args, logger=self.logger)
@@ -46,16 +45,20 @@ class Experiment:
         del kb
         gc.collect()
 
-    def initialize_knowledge_base(self):
+    def initialize_knowledge_base(self) -> KnowledgeBase:
+        """
+        Initialize a knowledge base
+        :return:
+        """
         self.logger.info(f"Knowledge Base being Initialized {self.args['path_knowledge_base']}")
+        # (1) Create ontolearn.KnowledgeBase instance
         kb = KnowledgeBase(path=self.args['path_knowledge_base'],
                            reasoner_factory=ClosedWorld_ReasonerFactory)
-        # (2.1) Store some info about KB
+        # (2) Store and Log some info about KB
         self.args['num_instances'] = kb.individuals_count()
         self.args['num_named_classes'] = len([i for i in kb.ontology().classes_in_signature()])
         self.args['num_properties'] = len([i for i in itertools.chain(kb.ontology().data_properties_in_signature(),
                                                                       kb.ontology().object_properties_in_signature())])
-        # (2.2) Log some info about data
         self.logger.info(f'Number of individuals: {self.args["num_instances"]}')
         self.logger.info(f'Number of named classes / expressions: {self.args["num_named_classes"]}')
         self.logger.info(f'Number of properties / roles : {self.args["num_properties"]}')
@@ -68,11 +71,14 @@ class Experiment:
         return kb
 
     def construct_targets_and_problems(self, kb: KnowledgeBase) -> LP:
-        # (3) Initialize Learning problems
+        """ Construct target class expressions, i.e., chose good labels. """
+        # (1) Select target expressions according to input strategy
         target_class_expressions, instance_idx_mapping = select_target_expressions(kb, self.args, logger=self.logger)
         # e_pos, e_neg = generate_random_learning_problems(instance_idx_mapping, self.args)
+        # (2) Generate training data points via sampling from targets.
         e_pos, e_neg = generate_learning_problems_from_targets(target_class_expressions, instance_idx_mapping,
                                                                self.args, logger=self.logger)
+        # (3) Initialize a LP object to store training data and target expressions compactly.
         lp = LP(e_pos=e_pos, e_neg=e_neg, instance_idx_mapping=instance_idx_mapping,
                 target_class_expressions=target_class_expressions)
         self.logger.info(lp)
@@ -83,12 +89,12 @@ class Experiment:
         self.logger.info('Experimental Setting is being serialized.')
         if torch.cuda.is_available():
             self.logger.info('Name of selected Device:{0}'.format(torch.cuda.get_device_name(self.trainer.device)))
-        # (1) Store Learning Problems
+        # (1) Store Learning Problems; We do not need to store them
         self.logger.info('Serialize Learning Problems.')
-        save_as_json(storage_path=self.storage_path,
-                     obj={i: {'Pos': e_pos, 'Neg': e_neg} for i, (e_pos, e_neg) in
-                          enumerate(zip(self.lp.e_pos, self.lp.e_neg))},
-                     name='training_learning_problems')
+        #save_as_json(storage_path=self.storage_path,
+        #             obj={i: {'Pos': e_pos, 'Neg': e_neg} for i, (e_pos, e_neg) in
+        #                  enumerate(zip(self.lp.e_pos, self.lp.e_neg))},
+        #             name='training_learning_problems')
         self.logger.info('Serialize Index of Instances.')
         # (2) Store Integer mapping of instance: index of individuals
         save_as_json(storage_path=self.storage_path,
@@ -104,15 +110,15 @@ class Experiment:
         # items in correct
         del df
         gc.collect()
-        self.logger.info('Serialize Targets as json.')
-        save_as_json(storage_path=self.storage_path, obj={target_cl.label_id: {'label_id': target_cl.label_id,
-                                                                               'name': target_cl.name,
-                                                                               'expression_chain': target_cl.expression_chain,
-                                                                               'idx_individuals': list(
-                                                                                   target_cl.idx_individuals),
-                                                                               }
-                                                          for target_cl in self.lp.target_class_expressions},
-                     name='target_class_expressions')
+        #self.logger.info('Serialize Targets as json.')
+        #save_as_json(storage_path=self.storage_path, obj={target_cl.label_id: {'label_id': target_cl.label_id,
+        #                                                                       'name': target_cl.name,
+        #                                                                       'expression_chain': target_cl.expression_chain,
+        #                                                                       'idx_individuals': list(
+        #                                                                           target_cl.idx_individuals),
+        #                                                                       }
+        #                                                  for target_cl in self.lp.target_class_expressions},
+        #             name='target_class_expressions')
 
         self.args['num_outputs'] = len(self.lp.target_class_expressions)
         # (4) Store input settings
@@ -137,7 +143,7 @@ class Experiment:
 
         self.logger.info(f'Total Runtime of the experiment:{time.time() - start_time}')
 
-    def evaluate(self, ncel, lp, args)->None:
+    def evaluate(self, ncel, lp, args) -> None:
         self.logger.info('Evaluation Starts')
 
         ncel_results = dict()

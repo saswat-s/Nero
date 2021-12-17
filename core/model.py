@@ -1,14 +1,7 @@
 import torch
 from torch import nn
 from typing import Dict, List, Iterable, Set
-from .dl_expression import TargetClassExpression, ClassExpression
-
-"""
-from ontolearn.search import RL_State
-from owlapy.model import OWLClass, OWLObjectComplementOf, OWLObjectSomeValuesFrom, OWLObjectAllValuesFrom, \
-    OWLObjectUnionOf, OWLObjectIntersectionOf, OWLClassExpression, OWLNothing, OWLThing, OWLNaryBooleanClassExpression
-from ontolearn.refinement_operators import LengthBasedRefinement
-"""
+from .expression import ClassExpression,TargetClassExpression
 from owlapy.render import DLSyntaxObjectRenderer
 from .static_funcs import apply_rho_on_rl_state
 import time
@@ -235,12 +228,8 @@ class NERO:
                 results = self.apply_continues_search_with_negatives(top_prediction_queue, st_to_intersect, set_pos,
                                                                      set_neg)
                 best_pred = results.get()
-            elif use_search == 'None':
-                # best_pred = max(top_prediction_queue, key=lambda x: x.quality)
-                best_pred = top_prediction_queue.get()
             else:
-                raise KeyError
-                """ Random """
+                best_pred = top_prediction_queue.get()
         else:
             best_pred = top_prediction_queue.get()
 

@@ -28,8 +28,91 @@ from owlapy.model import OWLOntology, OWLReasoner
 from owlapy.owlready2 import OWLOntology_Owlready2
 from owlapy.owlready2.temp_classes import OWLReasoner_Owlready2_TempClasses
 from owlapy.fast_instance_checker import OWLReasoner_FastInstanceChecker
-from .dl_expression import TargetClassExpression # Needs to be added to static_classes ?
 import gc
+from .expression import TargetClassExpression,ClassExpression, UniversalQuantifierExpression, ExistentialQuantifierExpression, Role
+
+
+def get_all_atomic_class_expressions(kb):
+    """
+    :param kb:
+    :return:
+    """
+    renderer = DLSyntaxObjectRenderer()
+    for owl_class in kb.get_all_sub_concepts(kb.thing):
+        yield ClassExpression(name=renderer.render(owl_class),
+                              str_individuals=set(_.get_iri().as_str() for _ in kb.individuals(owl_class)),
+                              owl_class=owl_class,
+                              expression_chain=['Thing'])
+
+
+def single_universal_quantifier(*, kb, filler, atomic_look_up, role_look_up):
+    renderer = DLSyntaxObjectRenderer()
+    for owl_class_instance in kb.most_general_universal_restrictions(domain=kb.thing, filler=filler):
+
+        str_role = renderer.render(owl_class_instance._property)
+
+        if str_role not in role_look_up:
+            role_look_up[str_role] = Role(name=str_role)
+
+        filler = renderer.render(owl_class_instance._filler)
+        concept = atomic_look_up[filler]
+
+        yield UniversalQuantifierExpression(name=renderer.render(owl_class_instance),
+                                            role=role_look_up[str_role],
+                                            filler=concept,
+                                            str_individuals=set(
+                                                _.get_iri().as_str() for _ in kb.individuals(owl_class_instance)),
+                                            expression_chain=['Thing'])
+
+
+def single_existential_quantifiers(*, kb, filler, atomic_look_up, role_look_up):
+    renderer = DLSyntaxObjectRenderer()
+    for owl_class_instance in kb.most_general_existential_restrictions(domain=kb.thing, filler=filler):
+
+        str_role = renderer.render(owl_class_instance._property)
+
+        if str_role not in role_look_up:
+            role_look_up[str_role] = Role(name=str_role)
+
+        filler = renderer.render(owl_class_instance._filler)
+        concept = atomic_look_up[filler]
+
+        yield ExistentialQuantifierExpression(name=renderer.render(owl_class_instance), role=role_look_up[str_role],
+                                              filler=concept,
+                                              str_individuals=set(
+                                                  _.get_iri().as_str() for _ in kb.individuals(owl_class_instance)),
+                                              expression_chain=['Thing'])
+
+
+def get_all_universal_quantifiers(kb, atomic_expressions):
+    atomic_look_up = {i.name: i for i in atomic_expressions}
+    role_look_up = dict()
+    for c in atomic_expressions:
+        yield from single_universal_quantifier(kb=kb, filler=c.owl_class,
+                                               atomic_look_up=atomic_look_up,
+                                               role_look_up=role_look_up)
+
+
+def get_all_existential_quantifiers(kb, atomic_expressions):
+    atomic_look_up = {i.name: i for i in atomic_expressions}
+    role_look_up = dict()
+    for c in atomic_expressions:
+        yield from single_existential_quantifiers(kb=kb, filler=c.owl_class,
+                                                  atomic_look_up=atomic_look_up,
+                                                  role_look_up=role_look_up)
+
+
+def get_all_quantifiers(kb, atomic_expressions):
+    dummy = {i for i in atomic_expressions}
+    renderer = DLSyntaxObjectRenderer()
+
+    dummy.add(ClassExpression(name=renderer.render(kb.thing),
+                              str_individuals=set(_.get_iri().as_str() for _ in kb.individuals(kb.thing)),
+                              owl_class=kb.thing,
+                              expression_chain=['non']))
+    return get_all_universal_quantifiers(kb, dummy), get_all_existential_quantifiers(kb, dummy)
+
+
 def select_target_expressions(kb, args, logger) -> Tuple[List[TargetClassExpression], Dict]:
     """
     Select target expressions
@@ -61,6 +144,7 @@ def select_target_expressions(kb, args, logger) -> Tuple[List[TargetClassExpress
 
 def target_expressions_via_refining_top(rho, kb, number_of_target_expressions, num_of_all_individuals,
                                         instance_idx_mapping):
+    # TODO: Later we can remove length base refinement and do everything via startin from T, N_C, \forall etc.
     rl_state = RL_State(kb.thing, parent_node=None, is_root=True)
     rl_state.length = kb.concept_len(kb.thing)
     rl_state.instances = set(kb.individuals(rl_state.concept))
@@ -71,30 +155,30 @@ def target_expressions_via_refining_top(rho, kb, number_of_target_expressions, n
 
     # (1) Refine Top concept
     for i in apply_rho_on_rl_state(rl_state, rho, kb):
-        # (3) Continue only concept is not empty.
+        # (2) Continue only concept is not empty.
         if num_of_all_individuals > len(i.instances) > 0:
-            # (3.1) Add OWL class expression if, its instances is not already seen
-            poss_target_idx_individuals = frozenset(instance_idx_mapping[_.get_iri().as_str()] for _ in i.instances)
+            # (2.1) Add OWL class expression if, its instances is not already seen
+            poss_target_idx_individuals = set(instance_idx_mapping[_.get_iri().as_str()] for _ in i.instances)
             if poss_target_idx_individuals not in target_idx_instance_set:
-                # (3.1.) Add instances
-                target_idx_instance_set.add(poss_target_idx_individuals)
-                # ( 3.2.) Create an instance
+                # (2.2.) Add instances
+                target_idx_instance_set.add(frozenset(poss_target_idx_individuals))
+                # (2.3.) Create an instance
                 target = TargetClassExpression(
                     label_id=len(target_idx_instance_set),
                     name=renderer.render(i.concept),
                     idx_individuals=poss_target_idx_individuals,
-                    expression_chain=[renderer.render(x.concept) for x in
-                                      retrieve_concept_chain(i)]
+                    length=kb.concept_len(i.concept),
+                    expression_chain=[renderer.render(x.concept) for x in retrieve_concept_chain(i)]
                 )
-                # Add the created instance
+                # (2.4) Store target
                 target_class_expressions.add(target)
 
-            # (4) Store for later refinement if concept is \forall or \exists
+            # (2.4) Store for later refinement if concept is \forall or \exists
             if isinstance(i.concept, OWLObjectAllValuesFrom) or isinstance(i.concept, OWLObjectSomeValuesFrom):
                 quantifiers.add(i)
+            # (2.5) Break if cretarion met.
             if len(target_class_expressions) == number_of_target_expressions:
                 break
-    gc.collect()
     return target_class_expressions, target_idx_instance_set, quantifiers
 
 
@@ -116,18 +200,19 @@ def refine_selected_expressions(rho, kb, quantifiers, target_class_expressions, 
                         break
                     # (3.1) Add OWL class expresssion if, its instances is not already seen
                     # poss_target_individuals = frozenset(_.get_iri().as_str() for _ in ref_selected_states.instances)
-                    poss_target_idx_individuals = frozenset(
+                    poss_target_idx_individuals = set(
                         instance_idx_mapping[_.get_iri().as_str()] for _ in ref_selected_states.instances)
                     if poss_target_idx_individuals not in target_idx_instance_set:
                         # (3.1.) Add instances
-                        target_idx_instance_set.add(poss_target_idx_individuals)
+                        target_idx_instance_set.add(frozenset(poss_target_idx_individuals))
                         # ( 3.2.) Create an instance
                         target = TargetClassExpression(
                             label_id=len(target_idx_instance_set),
                             name=renderer.render(ref_selected_states.concept),
                             idx_individuals=poss_target_idx_individuals,
                             expression_chain=[renderer.render(x.concept) for x in
-                                              retrieve_concept_chain(ref_selected_states)]
+                                              retrieve_concept_chain(ref_selected_states)],
+                            length=kb.concept_len(ref_selected_states.concept)
                         )
                         # Add the created instance
                         target_class_expressions.add(target)
@@ -168,7 +253,7 @@ def intersect_and_union_expressions_from_iterable(target_class_expressions, targ
                 i_or_j = i + j
                 if i_or_j.size > 0 and (i_or_j.idx_individuals not in target_idx_instance_set):
                     res.add(i_or_j)
-                    target_idx_instance_set.add(i_or_j.idx_individuals)
+                    target_idx_instance_set.add(frozenset(i_or_j.idx_individuals))
                     i_or_j.label_id = len(target_idx_instance_set)
                 else:
                     del i_or_j
@@ -189,9 +274,11 @@ def diverse_target_expression_selection(kb, tolerance_for_search_unique_target_e
     Select Target Expression
     :return:
     """
-    # Preparation
+    # (1) Initialize a length base refinement operator
     rho = LengthBasedRefinement(knowledge_base=kb)
     num_of_all_individuals = kb.individuals_count()
+    assert len(instance_idx_mapping) == num_of_all_individuals
+    # (2) Obtain some target expressions via refining the most general concept, \top.
     target_class_expressions, target_idx_instance_set, quantifiers = target_expressions_via_refining_top(rho=rho,
                                                                                                          kb=kb,
                                                                                                          number_of_target_expressions=number_of_target_expressions,
@@ -200,25 +287,27 @@ def diverse_target_expression_selection(kb, tolerance_for_search_unique_target_e
     logger.info(
         f'{len(target_class_expressions)} number of target expressions are obtained from the most general expression.')
     assert len(target_idx_instance_set) == len(target_class_expressions)
-
+    # (3) Refine refinements of \top further.
     refine_selected_expressions(rho, kb, quantifiers, target_class_expressions, target_idx_instance_set,
                                 tolerance_for_search_unique_target_exp, instance_idx_mapping,
                                 number_of_target_expressions, num_of_all_individuals)
     logger.info(
         f'{len(target_class_expressions)} number of target expressions are obtained from the most general expression and quantifiers')
     assert len(target_idx_instance_set) == len(target_class_expressions)
+    # (4) Intersect them.
     intersect_and_union_expressions_from_iterable(target_class_expressions, target_idx_instance_set,
                                                   number_of_target_expressions)
     logger.info(
         f'{len(target_class_expressions)} number of target expressions are obtained from the most general expression, quantifiers, and intersect/union all previous expressions')
     assert len(target_idx_instance_set) == len(target_class_expressions)
+    # (5) Add an id to a target expression/ a label.
 
     result = []
     for ith, tce in enumerate(target_class_expressions):
         tce.label_id = ith
         result.append(tce)
     gc.collect()
-    return result
+    return sorted(result,key=lambda x:x.length)
 
 
 def random_target_expression_selection(kb, number_of_target_expressions, instance_idx_mapping, logger) -> Tuple[
@@ -272,7 +361,7 @@ def random_target_expression_selection(kb, number_of_target_expressions, instanc
         target = TargetClassExpression(
             label_id=id_t,
             name=renderer.render(i.concept),
-            idx_individuals=frozenset(instance_idx_mapping[_.get_iri().as_str()] for _ in i.instances),
+            idx_individuals=set(instance_idx_mapping[_.get_iri().as_str()] for _ in i.instances),
             expression_chain=[renderer.render(x.concept) for x in retrieve_concept_chain(i)]
         )
         labels.append(target)
@@ -336,6 +425,7 @@ def ClosedWorld_ReasonerFactory(onto: OWLOntology) -> OWLReasoner:
                                                negation_default=True)
     return reasoner
 
+
 def total_size(o, handlers={}, verbose=False):
     """ Returns the approximate memory footprint an object and all of its contents.
 
@@ -386,7 +476,6 @@ import resource
 def using(point=""):
     usage = resource.getrusage(resource.RUSAGE_SELF)
     return '''%s: usertime=%s systime=%s mem=%s mb ''' % (point, usage[0], usage[1], usage[2] / 1024.0)
-
 
 
 def save_as_json(*, storage_path=None, obj=None, name=None):
@@ -441,11 +530,13 @@ def generate_target_class_expressions(lpg, kb, args):
 
     return target_class_expressions, target_individuals
 
+
 def compute_f1_target(target_class_expressions, pos, neg):
     pos = set(pos)
     neg = set(neg)
     return [f_measure(instances=t.idx_individuals, positive_examples=pos, negative_examples=neg) for t in
             target_class_expressions]
+
 
 def f_measure(*, instances: Set, positive_examples: Set, negative_examples: Set):
     tp = len(positive_examples.intersection(instances))
@@ -472,13 +563,13 @@ def f_measure(*, instances: Set, positive_examples: Set, negative_examples: Set)
 
 
 def accuracy(*, instances: Set, positive_examples: Set, negative_examples: Set):
-        tp = len(positive_examples.intersection(instances))
-        tn = len(negative_examples.difference(instances))
+    tp = len(positive_examples.intersection(instances))
+    tn = len(negative_examples.difference(instances))
 
-        fp = len(negative_examples.intersection(instances))
-        fn = len(positive_examples.difference(instances))
+    fp = len(negative_examples.intersection(instances))
+    fn = len(positive_examples.difference(instances))
 
-        return (tp + tn) / (tp+tn+fp+fn)
+    return (tp + tn) / (tp + tn + fp + fn)
 
 
 def retrieve_concept_chain(rl_state: RL_State) -> List[RL_State]:
