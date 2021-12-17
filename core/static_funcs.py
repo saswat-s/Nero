@@ -242,7 +242,7 @@ def intersect_and_union_expressions_from_iterable(target_class_expressions, targ
                 i_and_j = i * j
                 if i_and_j.size > 0 and (i_and_j.idx_individuals not in target_idx_instance_set):
                     res.add(i_and_j)
-                    target_idx_instance_set.add(i_and_j.idx_individuals)
+                    target_idx_instance_set.add(frozenset(i_and_j.idx_individuals))
                     i_and_j.label_id = len(target_idx_instance_set)
                 else:
                     del i_and_j
