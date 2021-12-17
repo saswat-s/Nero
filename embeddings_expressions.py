@@ -107,28 +107,87 @@ def plot_image(length_2emb, length_2_uris, path_save_fig):
     plt.show()
 
 
-@torch.no_grad()
-def run(args):
-    settings=dict()
+def construct_expression_look_up(path):
+    kb = KnowledgeBase(path=path,
+                       reasoner_factory=ClosedWorld_ReasonerFactory)
+
+    atomic_class_exp = [i for i in get_all_atomic_class_expressions(kb)]
+    universal, existantial = get_all_quantifiers(kb, atomic_class_exp)
+    look_up_class_exp = {i.name: i for i in atomic_class_exp}
+
+    for i in universal:
+        look_up_class_exp.setdefault(i.type, dict()).setdefault(i.role.name, dict()).update({i.filler.name: i})
+    for i in existantial:
+        look_up_class_exp.setdefault(i.type, dict()).setdefault(i.role.name, dict()).update({i.filler.name: i})
+
+    return look_up_class_exp, atomic_class_exp
+
+
+def selective_plot(pre_trained_nero, look_up_class_exp, atomic_class_exp):
+    concepts = [
+        look_up_class_exp['Daughter'],
+        look_up_class_exp['Son'],
+        look_up_class_exp['exists']['hasChild']['⊤'],  # close to Parent
+        look_up_class_exp['Brother'],
+        look_up_class_exp['Brother'] * look_up_class_exp['exists']['hasSibling']['Female'],
+        # look_up_class_exp['Brother'] * look_up_class_exp['exists']['hasSibling']['Male'],
+        look_up_class_exp['Brother'] * look_up_class_exp['exists']['hasSibling']['Mother'],
+        look_up_class_exp['Brother'] * look_up_class_exp['exists']['hasSibling']['Father'],
+        look_up_class_exp['Brother'] * look_up_class_exp['forall']['hasSibling']['Father'],
+        look_up_class_exp['Sister'],
+        look_up_class_exp['Sister'] * look_up_class_exp['exists']['hasSibling']['Female'],
+        look_up_class_exp['Sister'] * look_up_class_exp['forall']['hasSibling']['Mother'],
+        look_up_class_exp['Sister'] * look_up_class_exp['forall']['hasSibling']['Son'],
+        look_up_class_exp['Sister'] * look_up_class_exp['forall']['hasSibling']['Son'] * look_up_class_exp['Mother'],
+
+    ]
+
+    for c in concepts:
+        c.embeddings = pre_trained_nero.positive_expression_embeddings(
+            c.str_individuals).cpu().detach().numpy().flatten()
+
+    low_emb = PCA(n_components=2).fit_transform([c.embeddings for c in concepts])
+    sns.scatterplot(x=low_emb[:, 0], y=low_emb[:, 1])
+
+    for (c, emb) in zip(concepts, low_emb):
+        # plt.scatter(emb[0], emb[1])
+        plt.annotate(c.name, (emb[0], emb[1]), annotation_clip=False)
+
+    plt.xlabel('First Component')
+    plt.ylabel('Second Component')
+    plt.ylim(-200, 300)
+    plt.xlim(-200, 800)
+
+    plt.savefig('Sister_Brother.png')
+    plt.plot()
+    plt.show()
+
+def load_settings(args):
+    settings = dict()
+    instance_idx_mapping = dict()
+
     settings.update(args)
+
     # (1) Load the configuration setting.
-    with open(settings['path_of_experiment_folder'] + '/settings.json', 'r') as f:
+    with open(args['path_of_experiment_folder'] + '/settings.json', 'r') as f:
         settings.update(json.load(f))
 
-    instance_idx_mapping = dict()
     # (2) Load the configuration setting.
     with open(settings['path_of_experiment_folder'] + '/instance_idx_mapping.json', 'r') as f:
         instance_idx_mapping.update(json.load(f))
+    return settings, instance_idx_mapping
+
+
+@torch.no_grad()
+def run(args):
+    settings, instance_idx_mapping = load_settings(args)
 
     id_to_str_individuals = dict(zip(instance_idx_mapping.values(), instance_idx_mapping.keys()))
     # (3) Load the Pytorch Module.
     pre_trained_nero = load_nero(settings)
+    look_up_class_exp, atomic_class_exp = construct_expression_look_up(args['path_knowledge_base'])
+    selective_plot(pre_trained_nero, look_up_class_exp, atomic_class_exp)
 
-    kb = KnowledgeBase(path=args['path_knowledge_base'],
-                       reasoner_factory=ClosedWorld_ReasonerFactory)
-
-    rho = LengthBasedRefinement(knowledge_base=kb)
-    exit(1)
     length_2_uris = []
     length_2emb = []
 
@@ -136,8 +195,7 @@ def run(args):
     length_3emb = []
     for tcl in pre_trained_nero.target_class_expressions:
         tcl: TargetClassExpression
-        print(tcl.name)
-
+        # print(tcl.name)
         if len(tcl.name.split()) == 1 and ('¬' not in tcl.name):
             str_individuals = [id_to_str_individuals[_] for _ in tcl.idx_individuals]
             pos_emb = pre_trained_nero.positive_expression_embeddings(
@@ -154,8 +212,6 @@ def run(args):
             """ Do nothing """
 
     plot_image(length_2emb, length_2_uris, 'family_plot.png')
-    # plot_image(length_3emb, length_3_uris, 'complex_family_plot.png')
-
 
 if __name__ == '__main__':
     parser = ArgumentParser()
