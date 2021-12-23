@@ -16,66 +16,12 @@ from core.data_struct import ExpressionQueue
 from core.static_funcs import ClosedWorld_ReasonerFactory
 from core.dl_learner_binder import DLLearnerBinder
 
-
 from ontolearn import KnowledgeBase
 from owlapy.model import OWLEquivalentClassesAxiom, OWLClass, IRI, OWLObjectIntersectionOf, OWLObjectUnionOf, \
     OWLObjectSomeValuesFrom, OWLObjectInverseOf, OWLObjectProperty, OWLThing
 import itertools
 from typing import Iterable, Dict, List, Any
 import pandas
-
-"""
-def search(settings):
-    kb = KnowledgeBase(path=settings['path_knowledge_base'],
-                       reasoner_factory=ClosedWorld_ReasonerFactory)
-
-    def l(x):
-        return [_ for _ in kb.reasoner().sub_classes(x, direct=True)]
-
-    for i in l(kb.thing):
-        print('top:', i)
-        for j in l(i):
-            print(j)
-
-    for i in kb.all_individuals_set():
-        print(i)
-        for j in kb.reasoner().types(i):
-            print(j)
-
-    for i in itertools.chain(kb.ontology().object_properties_in_signature(),
-                             kb.ontology().data_properties_in_signature()):
-        print(i)
-
-    kb = KnowledgeBase(path='KGs/Family/family-benchmark_rich_background.owl')
-    NS = "http://www.benchmark.org/family#"
-
-    manager = kb.ontology().get_owl_ontology_manager()
-    # name of new class
-    cls_a: OWLClass = OWLClass(IRI.create(NS, "MyEnrichedClass"))
-    # example concept
-    concept_a = OWLObjectUnionOf((OWLClass(IRI(NS, 'Brother')), OWLClass(IRI(NS, 'Father'))))
-    manager.add_axiom(kb.ontology(), OWLEquivalentClassesAxiom(cls_a, concept_a))
-
-    # save as new rdfxml file
-    manager.save_ontology(kb.ontology(), IRI.create("file:/", "demir_family_new_onto.owl"))
-
-    kb = KnowledgeBase(path='demir_family_new_onto.owl',
-                       reasoner_factory=ClosedWorld_ReasonerFactory)
-
-    print('asd')
-    for i in kb.all_individuals_set():
-        print(i)
-        for j in kb.reasoner().types(i):
-            print(j, end=', ')
-    exit(1)
-
-    def l(x):
-        return [_ for _ in kb.reasoner().sub_classes(x, direct=True)]
-
-    for i in l(kb.thing):
-        for x in kb.reasoner().equivalent_classes(i):
-            print(x, 'equivalen', i)
-"""
 
 
 def load_target_class_expressions_and_instance_idx_mapping(path_of_experiment_folder):
@@ -88,42 +34,18 @@ def load_target_class_expressions_and_instance_idx_mapping(path_of_experiment_fo
     target_class_expressions = []
     df = pd.read_csv(path_of_experiment_folder + '/target_class_expressions.csv', index_col=0)
     for index, v in df.iterrows():
+        if 'length' not in v:
+            length_info = sum([2 if '¬' in _ else 1 for _ in v['name'].split()])
+        else:
+            length_info = v['length']
         t = TargetClassExpression(label_id=v['label_id'],
                                   name=v['name'],
+                                  length=length_info,
                                   idx_individuals=eval(v['idx_individuals']),
                                   expression_chain=eval(v['expression_chain']))
         assert len(t.idx_individuals) == len(eval(v['idx_individuals']))
 
         target_class_expressions.append(t)
-    """
-    with open(path_of_experiment_folder + '/target_class_expressions.json', 'r') as f:
-        for k, v in json.load(f).items():
-            k: str  # k denotes k.th label of target expression, json loading type conversion from int to str appreantly
-            v: dict  # v contains info for Target Class Expression Object
-            assert isinstance(k, str)
-            assert isinstance(v, dict)
-            try:
-                k = int(k)
-            except ValueError:
-                print(k)
-                print('Tried to convert to int')
-                exit(1)
-            try:
-
-                assert k == v['label_id']
-            except AssertionError:
-                print(k)
-                print(v['label_id'])
-                exit(1)
-
-            t = TargetClassExpression(label_id=v['label_id'],
-                                      name=v['name'],
-                                      idx_individuals=frozenset(v['idx_individuals']),
-                                      expression_chain=v['expression_chain'])
-            assert len(t.idx_individuals) == len(v['idx_individuals'])
-
-            target_class_expressions.append(t)
-    """
 
     instance_idx_mapping = dict()
     with open(path_of_experiment_folder + '/instance_idx_mapping.json', 'r') as f:
@@ -185,7 +107,7 @@ def report_model_results(results, name):
 def run(args):
     path_knowledge_base = args.path_knowledge_base
     path_dl_learner = args.path_dl_learner
-    # path_dl_learner=None
+    path_dl_learner = None
     path_of_json_learning_problems = args.path_of_json_learning_problems
     ncel_model = load_ncel(args.path_of_experiment_folder)
 
@@ -229,8 +151,9 @@ if __name__ == '__main__':
 
     # Path of an experiment folder
     parser.add_argument("--path_of_experiment_folder",
-                        #default='PretrainedNero/NeroFamily'
-                        default='Experiments/2021-12-17 18:25:04.430643'
+                        # default='PretrainedNero10K/NeroFamily',
+                        # default='PretrainedNero/NeroFamily',
+                        default='Experiments/div_NeroFamily'
                         )
     parser.add_argument("--path_knowledge_base")
     parser.add_argument("--path_of_json_learning_problems", default='LPs/Family/lp_dl_learner.json')
@@ -242,6 +165,6 @@ if __name__ == '__main__':
                         # default=os.getcwd() + '/dllearner-1.4.0/'
                         )
     parser.add_argument("--max_runtime_dl_learner", type=int, default=0)
-    parser.add_argument('--use_search', default='None', help='Continues,IntersectNegatives,None')
+    parser.add_argument('--use_search', default='Continues', help='Continues,None,SmartInit')
 
     run(parser.parse_args())

@@ -85,15 +85,22 @@ class Trainer:
         return NERO(model=model,
                     quality_func=self.quality_function,
                     target_class_expressions=self.learning_problems.target_class_expressions,
-                    instance_idx_mapping=self.learning_problems.instance_idx_mapping)
+                    instance_idx_mapping=self.learning_problems.str_individuals_to_idx)
 
     def training_loop(self):
 
         # (1) Initialize the model.
         model = self.neural_architecture_selection()
         # (3) Initialize the training. MSE seemed to yield better results, less num of concepts explored
-        loss_func = torch.nn.MSELoss()
-        # loss_func = torch.nn.CrossEntropyLoss()
+        if self.args['loss_func']=='MSELoss':
+            loss_func = torch.nn.MSELoss()
+        elif self.args['loss_func']=='CrossEntropyLoss':
+            loss_func = torch.nn.CrossEntropyLoss()
+        elif self.args['loss_func'] == 'HuberLoss':
+            loss_func = torch.nn.HuberLoss()
+        else:
+            raise KeyError
+
         optimizer = torch.optim.Adam(model.parameters(), lr=self.args['learning_rate'])
 
         """
@@ -125,6 +132,12 @@ class Trainer:
             # Validation on randomly sampled 1 percent of the data
             num_val_lp = 1 + len(self.learning_problems) // 100
             start_time = time.time()
+            self.logger.info('Training starts.')
+
+            self.validate(model, [self.learning_problems[i] for i in range(num_val_lp)], args={'topK': 3},
+                          info='Validation on Training Data with random weightsStarts')
+            model.train()
+
             # (5) Iterate training data
             for it in range(1, self.args['num_epochs'] + 1):
                 epoch_loss = 0
@@ -137,7 +150,7 @@ class Trainer:
                     # (6.3) Forward.
                     predictions = model.forward(xpos=xpos, xneg=xneg)
                     # (6.4) Compute Loss.
-                    batch_loss = loss_func(y, predictions)
+                    batch_loss = loss_func(input=predictions, target=y)
                     epoch_loss += batch_loss.item()
                     # (6.5) Backward loss.
                     batch_loss.backward()
@@ -149,9 +162,10 @@ class Trainer:
                 if it % printout_constant == 0:
                     self.logger.info(f'{it}.th epoch loss: {epoch_loss}')
                 if it % self.args['val_at_every_epochs'] == 0:
-                    # At each time randomly sample 10% of the training data.
-                    self.validate(model, lp=random.choices(self.learning_problems, k=num_val_lp), args={'topK': 100},
-                                  info='Validation on Training Data Starts')
+                    # At each time sample 10% of the training data.
+                    #self.validate(model, lp=random.choices(self.learning_problems, k=num_val_lp), args={'topK': 100},
+                    #              info='Validation on Training Data Starts')
+                    self.validate(model, [self.learning_problems[i] for i in range(num_val_lp)], args={'topK': 3},info='Validation on Training Data Starts')
                     model.train()
 
             training_time = time.time() - start_time

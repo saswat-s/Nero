@@ -30,7 +30,7 @@ class Experiment:
     def __init__(self, args):
         self.args = args
         # (1) Create Logging & Experiment folder for serialization
-        self.storage_path, _ = create_experiment_folder(folder_name='Experiments')
+        self.storage_path, _ = create_experiment_folder(main_folder_name='Experiments')
         self.logger = create_logger(name='Experimenter', p=self.storage_path)
         self.args['storage_path'] = self.storage_path
         # (2) Initialize KB.
@@ -40,7 +40,7 @@ class Experiment:
         # (4) Init Trainer.
         self.trainer = Trainer(learning_problems=self.lp, args=self.args, logger=self.logger)
 
-        self.instance_str = list(self.lp.instance_idx_mapping.keys())
+        self.list_str_individuals = list(self.lp.str_individuals_to_idx.keys())
         self.describe_and_store()
         del kb
         gc.collect()
@@ -85,20 +85,24 @@ class Experiment:
         return lp
 
     def describe_and_store(self) -> None:
+        """
+        Store learning
+        :return:
+        """
         assert self.args['num_instances'] > 0
         self.logger.info('Experimental Setting is being serialized.')
         if torch.cuda.is_available():
             self.logger.info('Name of selected Device:{0}'.format(torch.cuda.get_device_name(self.trainer.device)))
         # (1) Store Learning Problems; We do not need to store them
-        self.logger.info('Serialize Learning Problems.')
-        #save_as_json(storage_path=self.storage_path,
+        # self.logger.info('Serialize Learning Problems.')
+        # save_as_json(storage_path=self.storage_path,
         #             obj={i: {'Pos': e_pos, 'Neg': e_neg} for i, (e_pos, e_neg) in
         #                  enumerate(zip(self.lp.e_pos, self.lp.e_neg))},
         #             name='training_learning_problems')
         self.logger.info('Serialize Index of Instances.')
         # (2) Store Integer mapping of instance: index of individuals
         save_as_json(storage_path=self.storage_path,
-                     obj=self.lp.instance_idx_mapping, name='instance_idx_mapping')
+                     obj=self.lp.str_individuals_to_idx, name='instance_idx_mapping')
         # (3) Store Target Class Expressions with respective expression chain from T -> ... -> TargetExp
         # Instead of storing as list of objects, we can store targets as pandas dataframe
         self.logger.info('Serialize Pandas Dataframe containing target expressions')
@@ -110,8 +114,8 @@ class Experiment:
         # items in correct
         del df
         gc.collect()
-        #self.logger.info('Serialize Targets as json.')
-        #save_as_json(storage_path=self.storage_path, obj={target_cl.label_id: {'label_id': target_cl.label_id,
+        # self.logger.info('Serialize Targets as json.')
+        # save_as_json(storage_path=self.storage_path, obj={target_cl.label_id: {'label_id': target_cl.label_id,
         #                                                                       'name': target_cl.name,
         #                                                                       'expression_chain': target_cl.expression_chain,
         #                                                                       'idx_individuals': list(
@@ -129,7 +133,7 @@ class Experiment:
         # (1) Train model & Validate
         self.logger.info('Experiment starts')
         start_time = time.time()
-        ncel = self.trainer.start()
+        nero = self.trainer.start()
 
         if self.args['path_lp'] is not None:
             # (2) Load learning problems
@@ -139,38 +143,22 @@ class Experiment:
                   settings['problems'].items()]
 
             # (2) Evaluate model
-            self.evaluate(ncel, lp, self.args)
+            self.evaluate(nero, lp, self.args)
 
         self.logger.info(f'Total Runtime of the experiment:{time.time() - start_time}')
 
     def evaluate(self, ncel, lp, args) -> None:
-        self.logger.info('Evaluation Starts')
+        self.logger.info(f'Evaluation Starts {len(lp)}')
 
         ncel_results = dict()
-        celoe_results = dict()
         # (1) Iterate over input learning problems.
         for _, (goal_exp, p, n) in enumerate(lp):
-            ncel_report = ncel.fit(pos=p, neg=n, topK=args['topK'], local_search=False)
-            ncel_report.update({'P': p, 'N': n, 'F-measure': f_measure(instances=ncel_report['Instances'],
-                                                                       positive_examples=set(p),
-                                                                       negative_examples=set(n)),
-                                })
+            ncel_report=ncel.fit(str_pos=p, str_neg=n,
+                           topK=args['topK'],
+                           use_search=args['use_search'],kb_path=args['path_knowledge_base'])
             ncel_report.update({'Target': goal_exp})
+
             ncel_results[_] = ncel_report
-            if args['eval_dl_learner']:
-                celoe = DLLearnerBinder(binary_path=args['dl_learner_binary_path'], kb_path=args['path_knowledge_base'],
-                                        model='celoe')
-                best_pred_celoe = celoe.fit(pos=p, neg=n, max_runtime=3).best_hypothesis()
-                celoe_results[_] = {'P': p, 'N': n,
-                                    'Prediction': best_pred_celoe['Prediction'],
-                                    'F-measure': best_pred_celoe['F-measure'],
-                                    'NumClassTested': best_pred_celoe['NumClassTested'],
-                                    'Runtime': best_pred_celoe['Runtime'],
-                                    }
-        if len(ncel_results) < 50:
-            for k, v in ncel_results.items():
-                self.logger.info(
-                    f'{k}.th test LP:\tTarget:{v["Target"]}\tPred:{v["Prediction"]}\tF-measure:{v["F-measure"]:.3f}\tNumClassTested:{v["NumClassTested"]}')
 
         # Overall Preport
         avg_f1_ncel = np.array([i['F-measure'] for i in ncel_results.values()]).mean()
@@ -178,12 +166,4 @@ class Experiment:
         avg_expression_ncel = np.array([i['NumClassTested'] for i in ncel_results.values()]).mean()
         self.logger.info(
             f'Average F-measure NCEL:{avg_f1_ncel}\t Avg. Runtime:{avg_runtime_ncel}\t Avg. Expression Tested:{avg_expression_ncel} in {len(lp)} ')
-
-        if args['eval_dl_learner']:
-            avg_f1_celoe = np.array([i['F-measure'] for i in celoe_results.values()]).mean()
-            avg_runtime_celoe = np.array([i['Runtime'] for i in celoe_results.values()]).mean()
-            avg_expression_celoe = np.array([i['NumClassTested'] for i in celoe_results.values()]).mean()
-
-            self.logger.info(
-                f'Average F-measure CELOE:{avg_f1_celoe}\t Avg. Runtime:{avg_runtime_celoe}\t Avg. Expression Tested:{avg_expression_celoe}')
         self.logger.info('Evaluation Ends')

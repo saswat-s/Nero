@@ -92,8 +92,8 @@ def launch_service(ncel_model):
         if random_examples:
             # Either sample from here self.instance_idx_mapping
             # or sample from targets
-            pos_str = random.sample(list(ncel_model.instance_idx_mapping.keys()), int(size_of_examples))
-            neg_str = random.sample(list(ncel_model.instance_idx_mapping.keys()), int(size_of_examples))
+            pos_str = random.sample(list(ncel_model.str_individuals_to_idx.keys()), int(size_of_examples))
+            neg_str = random.sample(list(ncel_model.str_individuals_to_idx.keys()), int(size_of_examples))
         else:
             pos_str = positive_examples.split(",")
             neg_str = negative_examples.split(",")

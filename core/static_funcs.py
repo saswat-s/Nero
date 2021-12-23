@@ -1,3 +1,4 @@
+import itertools
 from typing import List, Tuple, Set, Dict
 from ontolearn.search import RL_State
 import datetime
@@ -29,7 +30,9 @@ from owlapy.owlready2 import OWLOntology_Owlready2
 from owlapy.owlready2.temp_classes import OWLReasoner_Owlready2_TempClasses
 from owlapy.fast_instance_checker import OWLReasoner_FastInstanceChecker
 import gc
-from .expression import TargetClassExpression,ClassExpression, UniversalQuantifierExpression, ExistentialQuantifierExpression, Role
+from .expression import TargetClassExpression, ClassExpression, UniversalQuantifierExpression, \
+    ExistentialQuantifierExpression, Role
+from .refinement_operator import SimpleRefinement
 
 
 def get_all_atomic_class_expressions(kb):
@@ -121,7 +124,7 @@ def select_target_expressions(kb, args, logger) -> Tuple[List[TargetClassExpress
     :param logger:
     :return: a list of target expressions and a dictionary of URI to integer index
     """
-    logger.info('Target Expressions being selected.')
+    logger.info(f'Target Expressions being selected under the {args["target_expression_selection"]}.')
     # (1) Individual to integer mapping
     instance_idx_mapping = {individual.get_iri().as_str(): i for i, individual in enumerate(kb.individuals())}
     number_of_target_expressions = args['number_of_target_expressions']
@@ -137,13 +140,18 @@ def select_target_expressions(kb, args, logger) -> Tuple[List[TargetClassExpress
                                                                       number_of_target_expressions,
                                                                       instance_idx_mapping,
                                                                       logger)
+    elif args['target_expression_selection'] == 'uncorrelated_target_expression_selection':
+        target_class_expressions = uncorrelated_target_expression_selection(kb,
+                                                                            number_of_target_expressions,
+                                                                            instance_idx_mapping,
+                                                                            logger)
     else:
         raise KeyError(f'target_expression_selection:{args["target_expression_selection"]}')
     return target_class_expressions, instance_idx_mapping
 
 
-def target_expressions_via_refining_top(rho, kb, number_of_target_expressions, num_of_all_individuals,
-                                        instance_idx_mapping):
+def target_expressions_binary_selection_via_refining_top(rho, kb, number_of_target_expressions, num_of_all_individuals,
+                                                         instance_idx_mapping):
     # TODO: Later we can remove length base refinement and do everything via startin from T, N_C, \forall etc.
     rl_state = RL_State(kb.thing, parent_node=None, is_root=True)
     rl_state.length = kb.concept_len(kb.thing)
@@ -166,6 +174,7 @@ def target_expressions_via_refining_top(rho, kb, number_of_target_expressions, n
                 target = TargetClassExpression(
                     label_id=len(target_idx_instance_set),
                     name=renderer.render(i.concept),
+                    # str_individuals=None,
                     idx_individuals=poss_target_idx_individuals,
                     length=kb.concept_len(i.concept),
                     expression_chain=[renderer.render(x.concept) for x in retrieve_concept_chain(i)]
@@ -263,6 +272,110 @@ def intersect_and_union_expressions_from_iterable(target_class_expressions, targ
         target_class_expressions.update(res)
 
 
+def combinatorial(top_refinements, number_of_target_expressions=None):
+    targets = set()
+    targets_indv = set()
+    for i in top_refinements:
+        if len(i.str_individuals) == 0:
+            continue
+
+        if i.str_individuals in targets_indv:
+            continue
+        targets_indv.add(frozenset(i.str_individuals)), targets.add(i)
+
+        if number_of_target_expressions:
+            if len(targets) == number_of_target_expressions:
+                break
+
+        for j in top_refinements:
+            if len(j.str_individuals) == 0:
+                continue
+            if i == j:
+                continue
+            i_and_j = i * j
+            i_or_j = i + j
+
+            if len(i_and_j.str_individuals) > 0 and (i_and_j.str_individuals not in targets_indv):
+                targets_indv.add(frozenset(i_and_j.str_individuals)), targets.add(i_and_j)
+                if len(targets) == number_of_target_expressions:
+                    break
+
+            if len(i_or_j.str_individuals) > 0 and i_or_j.str_individuals not in targets_indv:
+                targets_indv.add(frozenset(i_or_j.str_individuals)), targets.add(i_or_j)
+                if number_of_target_expressions:
+                    if len(targets) == number_of_target_expressions:
+                        break
+        if number_of_target_expressions:
+            if len(targets) == number_of_target_expressions:
+                break
+
+    assert len(targets) == len(targets_indv)
+    del targets_indv, top_refinements
+
+    return targets
+
+
+def reduce_redundancy(sequence_of_exp):
+    targets = set()
+    targets_indv = set()
+    for i in sequence_of_exp:
+        if len(i.str_individuals) == 0:
+            continue
+
+        if i.str_individuals in targets_indv:
+            continue
+        targets_indv.add(frozenset(i.str_individuals)), targets.add(i)
+
+    del targets_indv
+    gc.collect()
+    return targets
+
+
+def uncorrelated_target_expression_selection(kb, number_of_target_expressions,
+                                             instance_idx_mapping,
+                                             logger):
+    """
+    (1) Refine Top expression and obtain all possible ALC expressions up to length 3
+    (1.1) Consider only those expression as labels whose set of individuals has not been seen before
+    (1.2.) E.g. {{....}, {.}, {...}}. Only  consider those expressions as labels that do not cover all individuals
+    (2)
+    :param kb:
+    :param tolerance_for_search_unique_target_exp:
+    :param number_of_target_expressions:
+    :param instance_idx_mapping:
+    :param logger:
+    :return:
+    """
+    rho = SimpleRefinement(knowledge_base=kb)
+
+    num_of_all_individuals = kb.individuals_count()
+    assert len(instance_idx_mapping) == num_of_all_individuals
+
+    nc = rho.get_top_refinements_via_length(1)
+    neg_nc = rho.get_top_refinements_via_length(2)
+    unions_intersections_quantifiers = rho.get_top_refinements_via_length(3)
+    uncorrelated_refinements = reduce_redundancy(nc + neg_nc + unions_intersections_quantifiers)
+    del nc, neg_nc, unions_intersections_quantifiers
+    gc.collect()
+    while len(uncorrelated_refinements) != number_of_target_expressions:
+        uncorrelated_refinements = combinatorial(uncorrelated_refinements, number_of_target_expressions)
+    result = []
+    for ith, ce in enumerate(sorted(uncorrelated_refinements, key=lambda x: x.length)):
+        result.append(TargetClassExpression(
+            label_id=ith,
+            name=ce.name,
+            idx_individuals=set(instance_idx_mapping[i] for i in ce.str_individuals),
+            length=ce.length,
+            expression_chain=ce.expression_chain
+        ))
+    gc.collect()
+    logger.info(
+        f'{len(result)} number of target expressions are obtained.')
+
+    assert len(result) == number_of_target_expressions
+    return result
+
+
 def diverse_target_expression_selection(kb, tolerance_for_search_unique_target_exp, number_of_target_expressions,
                                         instance_idx_mapping, logger) -> Tuple[
     List[TargetClassExpression], Dict]:
@@ -279,11 +392,12 @@ def diverse_target_expression_selection(kb, tolerance_for_search_unique_target_e
     num_of_all_individuals = kb.individuals_count()
     assert len(instance_idx_mapping) == num_of_all_individuals
     # (2) Obtain some target expressions via refining the most general concept, \top.
-    target_class_expressions, target_idx_instance_set, quantifiers = target_expressions_via_refining_top(rho=rho,
-                                                                                                         kb=kb,
-                                                                                                         number_of_target_expressions=number_of_target_expressions,
-                                                                                                         num_of_all_individuals=num_of_all_individuals,
-                                                                                                         instance_idx_mapping=instance_idx_mapping)
+    target_class_expressions, target_idx_instance_set, quantifiers = target_expressions_binary_selection_via_refining_top(
+        rho=rho,
+        kb=kb,
+        number_of_target_expressions=number_of_target_expressions,
+        num_of_all_individuals=num_of_all_individuals,
+        instance_idx_mapping=instance_idx_mapping)
     logger.info(
         f'{len(target_class_expressions)} number of target expressions are obtained from the most general expression.')
     assert len(target_idx_instance_set) == len(target_class_expressions)
@@ -307,7 +421,7 @@ def diverse_target_expression_selection(kb, tolerance_for_search_unique_target_e
         tce.label_id = ith
         result.append(tce)
     gc.collect()
-    return sorted(result,key=lambda x:x.length)
+    return sorted(result, key=lambda x: x.length)
 
 
 def random_target_expression_selection(kb, number_of_target_expressions, instance_idx_mapping, logger) -> Tuple[
@@ -387,8 +501,11 @@ def generate_learning_problems_from_targets(target_class_expressions: List[Targe
     num_individual_per_example = args['num_individual_per_example']
     for i in range(args['num_of_learning_problems_training']):
         for tce in target_class_expressions:
-            pos_examples.append(random.choices(list(tce.idx_individuals), k=num_individual_per_example))
-            neg_examples.append(random.choices(instances_idx_list, k=num_individual_per_example))
+            try:
+                pos_examples.append(random.choices(list(tce.idx_individuals), k=num_individual_per_example))
+                neg_examples.append(random.choices(instances_idx_list, k=num_individual_per_example))
+            except:
+                continue
     assert len(pos_examples) == len(neg_examples)
     return pos_examples, neg_examples
 
@@ -582,10 +699,10 @@ def retrieve_concept_chain(rl_state: RL_State) -> List[RL_State]:
     return list(hierarchy)
 
 
-def create_experiment_folder(folder_name='Experiments'):
-    directory = os.getcwd() + '/' + folder_name + '/'
-    folder_name = str(datetime.datetime.now())
-    path_of_folder = directory + folder_name
+def create_experiment_folder(main_folder_name='Experiments', inner_folder_prefix='Nero'):
+    directory = os.getcwd() + '/' + main_folder_name + '/' + inner_folder_prefix
+    main_folder_name = str(datetime.datetime.now())
+    path_of_folder = directory + main_folder_name
     os.makedirs(path_of_folder)
     return path_of_folder, path_of_folder[:path_of_folder.rfind('/')]
 

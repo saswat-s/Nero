@@ -52,23 +52,30 @@ class ExpressionQueue:
 class SearchTree:
     def __init__(self):
         self.items_in_queue = PriorityQueue()
-        self.gate = set()
+        self.gate = dict()
 
-    def put(self, expression):
-        if expression not in self.gate:
-            # The lowest valued entries are retrieved first
-            self.items_in_queue.put((-expression.quality, expression))
-            self.gate.add(expression)
+    def put(self, expression,key=None):
+        if expression.quality > 0:
+            if expression.name not in self.gate:
+                if key is None:
+                    key=-expression.quality
+                # The lowest valued entries are retrieved first
+                self.items_in_queue.put((key, expression))
+                self.gate[expression.name]=expression
 
     def get(self):
-        _, expression = self.items_in_queue.get()
-        self.gate.remove(expression)
+        _, expression = self.items_in_queue.get(timeout=1)
+        del self.gate[expression.name]
         return expression
 
     def __len__(self):
         return len(self.gate)
 
+    def __contains__(self, x):
+        return x.name in self.gate
+
     def __iter__(self):
+        # No garantie of returing best
         return (exp for q, exp in self.items_in_queue.queue)
 
     def extend_queue(self, other) -> None:

@@ -1,9 +1,9 @@
 import torch
 from torch import nn
 from typing import Dict, List, Iterable, Set
-from .expression import ClassExpression,TargetClassExpression
+from .expression import ClassExpression, TargetClassExpression
 from owlapy.render import DLSyntaxObjectRenderer
-from .static_funcs import apply_rho_on_rl_state
+from .static_funcs import apply_rho_on_rl_state, ClosedWorld_ReasonerFactory
 import time
 from .data_struct import ExpressionQueue, State, SearchTree
 from ontolearn import KnowledgeBase
@@ -17,13 +17,17 @@ class NERO:
                  instance_idx_mapping: Dict):
         self.model = model
         self.quality_func = quality_func
-        # expression ordered by id.
-        self.target_class_expressions = target_class_expressions
-        self.str_target_class_expression_to_label_id = {i.name: i.label_id for i in self.target_class_expressions}
-
         self.instance_idx_mapping = instance_idx_mapping
         self.inverse_instance_idx_mapping = dict(
             zip(self.instance_idx_mapping.values(), self.instance_idx_mapping.keys()))
+        # expression ordered by id.
+        self.target_class_expressions = target_class_expressions
+        # Sanity checking
+        # for i in self.target_class_expressions:
+        #    if i.str_individuals is None:
+        #        i.str_individuals = { self.inverse_instance_idx_mapping[i] for i in i.idx_individuals}
+        self.str_target_class_expression_to_label_id = {i.name: i.label_id for i in self.target_class_expressions}
+
         self.renderer = DLSyntaxObjectRenderer()
         self.max_top_k = len(self.target_class_expressions)
 
@@ -143,6 +147,35 @@ class NERO:
         # Later call CELOE if goal not found
         return results, len(results), time.time() - start_time
 
+    def search_with_init(self, kb_path,top_prediction_queue, set_pos, set_neg):
+        """
+
+        :param top_prediction_queue:
+        :param rho:
+        :param set_pos:
+        :param set_neg:
+        :return:
+        """
+        kb = KnowledgeBase(path=kb_path,
+                           reasoner_factory=ClosedWorld_ReasonerFactory)
+        rho = SimpleRefinement(knowledge_base=kb)
+        heuristic_st = SearchTree()
+        # (2) Iterate over advantages states
+        while len(top_prediction_queue) > 0:
+            nero_mode_ce = top_prediction_queue.get()
+            # (2.1) Compute heuristic val: C
+            heuristic_st.put(nero_mode_ce, key=-nero_mode_ce.quality / nero_mode_ce.length)
+            # (2.2) Add a path from T - >
+            for c in nero_mode_ce.expression_chain:
+                # (2.3.) Obtain Path from T-> C
+                ce = rho.expression_from_str(c)
+                if ce not in heuristic_st:
+                    ce.quality = self.call_quality_function(set_str_individual=ce.str_individuals,
+                                                            set_str_pos=set_pos,
+                                                            set_str_neg=set_neg)
+                    heuristic_st.put(ce, key=-ce.quality / ce.length)
+        return heuristic_st
+
     def fit(self, str_pos: [str], str_neg: [str], topK: int = None, use_search=None, kb_path=None) -> Dict:
         """
 
@@ -171,11 +204,11 @@ class NERO:
         _, sort_idxs = torch.sort(self.forward(xpos=torch.LongTensor([idx_pos]),
                                                xneg=torch.LongTensor([idx_neg])), dim=1, descending=True)
         sort_idxs = sort_idxs.cpu().numpy()[0]
-
         # (4) Iterate over the sorted index of target expressions.
         for idx_target in sort_idxs[:topK]:
             # (5) Retrieval of instance.
             str_instances = self.retrieval_of_individuals(self.target_class_expressions[idx_target])
+
             # (6) Compute Quality.
             quality_score = self.call_quality_function(set_str_individual=str_instances,
                                                        set_str_pos=set_pos,
@@ -185,7 +218,7 @@ class NERO:
                                                      str_individuals=str_instances,
                                                      expression_chain=self.target_class_expressions[
                                                          idx_target].expression_chain,
-                                                     quality=quality_score))
+                                                     quality=quality_score), key=-quality_score)
 
             # (8) If goal is found, we do not need to compute scores.
             if quality_score == 1.0:
@@ -196,38 +229,18 @@ class NERO:
         if goal_found is False:
             if use_search == 'Continues':
                 best_pred = top_prediction_queue.get()
-                top_prediction_queue.put(best_pred)
+                top_prediction_queue.put(best_pred, key=-best_pred.quality)
                 self.apply_continues_search(top_prediction_queue, set_pos, set_neg)
                 best_constructed_expression = top_prediction_queue.get()
                 if best_constructed_expression > best_pred:
                     best_pred = best_constructed_expression
-            elif use_search == 'IntersectNegatives':
-                # Let t \in Top, m \in Least
-                # Assumption
-                # (1) \for all i in E^+ t(i)=1 and \exist i in E^- t(i)=1
-                # (2) \for all i in E^- m(i)=1 and \exist i in E^+ m(i)=1
-                # (3) Intersect m and take AND
-                st_to_intersect = SearchTree()
-
-                topK_lowest_predictions = sort_idxs[-10:]
-                for idx_target in topK_lowest_predictions:
-                    # (5) Retrieval of instance. and negate it
-                    str_instances = self.set_str_all_instances - self.retrieval_of_individuals(
-                        self.target_class_expressions[idx_target])
-                    # (6) Compute Quality.
-                    quality_score = self.call_quality_function(set_str_individual=str_instances,
-                                                               set_str_pos=set_pos,
-                                                               set_str_neg=set_neg)
-                    # (7) Put CE into the priority queue.
-                    st_to_intersect.put(
-                        ClassExpression(name='Neg(' + self.target_class_expressions[idx_target].name + ')',
-                                        str_individuals=str_instances,
-                                        expression_chain=self.target_class_expressions[idx_target].expression_chain + [
-                                            'NEG'],
-                                        quality=quality_score))
-                results = self.apply_continues_search_with_negatives(top_prediction_queue, st_to_intersect, set_pos,
-                                                                     set_neg)
-                best_pred = results.get()
+            elif use_search == 'SmartInit':
+                best_pred = top_prediction_queue.get()
+                top_prediction_queue.put(best_pred, key=-best_pred.quality)
+                top_prediction_queue = self.search_with_init(kb_path,top_prediction_queue, set_pos, set_neg)
+                best_constructed_expression = top_prediction_queue.get()
+                if best_constructed_expression > best_pred:
+                    best_pred = best_constructed_expression
             else:
                 best_pred = top_prediction_queue.get()
         else:
@@ -257,6 +270,7 @@ class NERO:
         :param set_str_neg:
         :return:
         """
+
         num_explore_concepts = len(top_states) // 10
         max_size = len(top_states) + num_explore_concepts
         # (1) Get embeddings of E^+.
@@ -294,6 +308,9 @@ class NERO:
                         break
 
                 i_and_j = i * j
+                if len(i_and_j.str_individuals) == 0:
+                    continue
+
                 i_and_j.quality = self.call_quality_function(set_str_individual=i_and_j.str_individuals,
                                                              set_str_pos=set_str_pos,
                                                              set_str_neg=set_str_neg)
