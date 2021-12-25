@@ -70,7 +70,8 @@ class ClassExpression(ABC):
         self.str_individuals = str_individuals
         self.expression_chain = expression_chain
         self.num_individuals = len(self.str_individuals)
-        self.quality = quality
+        if quality is None:
+            self.quality = -1.0  # quality
         self.owl_class = owl_class
         if length is None:
             self.length = len(self.name.split())
@@ -83,6 +84,45 @@ class ClassExpression(ABC):
     def __repr__(self):
         return self.__str__()
 
+    def __mul__(self, other):
+        if self.length <= 2 and other.length <= 2:
+            name = f'{self.name} ⊓ {other.name}'
+        elif self.length <= 2 < other.length:
+            name = f'{self.name} ⊓ ({other.name})'
+        elif self.length > other.length <= 2:
+            name = f'({self.name}) ⊓ {other.name}'
+        elif self.length >= 2 and other.length >= 2:
+            name = f'({self.name}) ⊓ ({other.name})'
+        else:
+            print(self)
+            print(other)
+            raise ValueError
+        return IntersectionClassExpression(name=name, length=self.length + other.length + 1,
+                                           concepts=(self, other),
+                                           str_individuals=self.str_individuals.intersection(other.str_individuals),
+                                           expression_chain=((self.expression_chain + (self.name,)), 'AND',
+                                                             (other.expression_chain + (other.name,))))
+
+    def __add__(self, other):
+        if self.length <= 2 and other.length <= 2:
+            name = f'{self.name} ⊔ {other.name}'
+        elif self.length <= 2 < other.length:
+            name = f'{self.name} ⊔ ({other.name})'
+        elif self.length > other.length <= 2:
+            name = f'({self.name}) ⊔ {other.name}'
+        elif self.length >= 2 and other.length >= 2:
+            name = f'({self.name}) ⊔ ({other.name})'
+        else:
+            print(self)
+            print(other)
+            raise ValueError
+
+        return UnionClassExpression(name=name, length=self.length + other.length + 1,
+                                    str_individuals=self.str_individuals.union(other.str_individuals),
+                                    concepts=(self, other),
+                                    expression_chain=((self.expression_chain + (self.name,)), 'OR',
+                                                      (other.expression_chain + (other.name,))))
+
     @property
     def size(self):
         return self.num_individuals
@@ -90,148 +130,41 @@ class ClassExpression(ABC):
     def __lt__(self, other):
         return self.quality < other.quality
 
-    """
-    def __mul__(self, other):
-        if self.length <= 2 and other.length <= 2:
-            name = f'{self.name} ⊓ {other.name}'
-        elif self.length <= 2 < other.length:
-            name = f'{self.name} ⊓ ({other.name})'
-        elif self.length > other.length <= 2:
-            name = f'({self.name}) ⊓ {other.name}'
-        elif self.length >= 2 and other.length >= 2:
-            name = f'({self.name}) ⊓ ({other.name})'
-        else:
-            print(self)
-            print(other)
-            raise ValueError
-        return IntersectionClassExpression(name=name, length=self.length + other.length + 1,
-                                           str_individuals=self.str_individuals.intersection(other.str_individuals),
-                                           expression_chain=((self.expression_chain + (self.name,)), 'AND',
-                                                             (other.expression_chain + (other.name,))))
-
-    def __add__(self, other):
-        if self.length <= 2 and other.length <= 2:
-            name = f'{self.name} ⊔ {other.name}'
-        elif self.length <= 2 < other.length:
-            name = f'{self.name} ⊔ ({other.name})'
-        elif self.length > other.length <= 2:
-            name = f'({self.name}) ⊔ {other.name}'
-        elif self.length >= 2 and other.length >= 2:
-            name = f'({self.name}) ⊔ ({other.name})'
-        else:
-            print(self)
-            print(other)
-            raise ValueError
-
-        return UnionClassExpression(name=name, length=self.length + other.length + 1,
-                                    str_individuals=self.str_individuals.union(other.str_individuals),
-                                    expression_chain=((self.expression_chain + (self.name,)), 'OR',
-                                                      (other.expression_chain + (other.name,))))
-    """
-
 
 class UnionClassExpression(ClassExpression):
     def __init__(self, *, name: str, length: int, str_individuals: Set, expression_chain: List, owl_class=None,
+                 concepts=None,
                  quality=None, label_id=None, idx_individuals=None):
-        super().__init__(name=name, str_individuals=str_individuals, expression_chain=expression_chain, quality=quality,
+        super().__init__(name=name, str_individuals=str_individuals,
+                         expression_chain=expression_chain, quality=quality,
                          owl_class=owl_class)
         assert length >= 3
         self.length = length
         self.type = 'union_expression'
         self.label_id = label_id
         self.idx_individuals = idx_individuals
+        self.concepts = concepts
+
 
     def __str__(self):
-        return f'UnionClassExpression at {hex(id(self))} | {self.name} | Indv:{self.num_individuals} | Quality:{self.quality}'  # | expression_chain:{self.expression_chain}'
-
-    def __mul__(self, other):
-        if self.length <= 2 and other.length <= 2:
-            name = f'{self.name} ⊓ {other.name}'
-        elif self.length <= 2 < other.length:
-            name = f'{self.name} ⊓ ({other.name})'
-        elif self.length > other.length <= 2:
-            name = f'({self.name}) ⊓ {other.name}'
-        elif self.length >= 2 and other.length >= 2:
-            name = f'({self.name}) ⊓ ({other.name})'
-        else:
-            print(self)
-            print(other)
-            raise ValueError
-        return IntersectionClassExpression(name=name, length=self.length + other.length + 1,
-                                           str_individuals=self.str_individuals.intersection(other.str_individuals),
-                                           expression_chain=((self.expression_chain + (self.name,)), 'AND',
-                                                             (other.expression_chain + (other.name,))))
-
-    def __add__(self, other):
-        if self.length <= 2 and other.length <= 2:
-            name = f'{self.name} ⊔ {other.name}'
-        elif self.length <= 2 < other.length:
-            name = f'{self.name} ⊔ ({other.name})'
-        elif self.length > other.length <= 2:
-            name = f'({self.name}) ⊔ {other.name}'
-        elif self.length >= 2 and other.length >= 2:
-            name = f'({self.name}) ⊔ ({other.name})'
-        else:
-            print(self)
-            print(other)
-            raise ValueError
-
-        return UnionClassExpression(name=name, length=self.length + other.length + 1,
-                                    str_individuals=self.str_individuals.union(other.str_individuals),
-                                    expression_chain=((self.expression_chain + (self.name,)), 'OR',
-                                                      (other.expression_chain + (other.name,))))
+        return f'UnionClassExpression at {hex(id(self))} | {self.name} | Indv:{self.num_individuals} | Quality:{self.quality:.3f}'  # | expression_chain:{self.expression_chain}'
 
 
 class IntersectionClassExpression(ClassExpression):
     def __init__(self, *, name: str, length: int, str_individuals: Set, expression_chain: List, owl_class=None,
-                 quality=None, label_id=None, idx_individuals=None):
+                 quality=None, label_id=None, concepts=None,idx_individuals=None):
         super().__init__(name=name, str_individuals=str_individuals, expression_chain=expression_chain, quality=quality,
                          owl_class=owl_class)
+
         assert length >= 3
         self.length = length
         self.type = 'intersection_expression'
         self.label_id = label_id
         self.idx_individuals = idx_individuals
+        self.concepts = concepts
 
     def __str__(self):
         return f'UnionClassExpression at {hex(id(self))} | {self.name} | Indv:{self.num_individuals} | Quality:{self.quality}'  # | expression_chain:{self.expression_chain}'
-
-    def __mul__(self, other):
-        if self.length <= 2 and other.length <= 2:
-            name = f'{self.name} ⊓ {other.name}'
-        elif self.length <= 2 < other.length:
-            name = f'{self.name} ⊓ ({other.name})'
-        elif self.length > other.length <= 2:
-            name = f'({self.name}) ⊓ {other.name}'
-        elif self.length >= 2 and other.length >= 2:
-            name = f'({self.name}) ⊓ ({other.name})'
-        else:
-            print(self)
-            print(other)
-            raise ValueError
-        return IntersectionClassExpression(name=name, length=self.length + other.length + 1,
-                                           str_individuals=self.str_individuals.intersection(other.str_individuals),
-                                           expression_chain=((self.expression_chain + (self.name,)), 'AND',
-                                                             (other.expression_chain + (other.name,))))
-
-    def __add__(self, other):
-        if self.length <= 2 and other.length <= 2:
-            name = f'{self.name} ⊔ {other.name}'
-        elif self.length <= 2 < other.length:
-            name = f'{self.name} ⊔ ({other.name})'
-        elif self.length > other.length <= 2:
-            name = f'({self.name}) ⊔ {other.name}'
-        elif self.length >= 2 and other.length >= 2:
-            name = f'({self.name}) ⊔ ({other.name})'
-        else:
-            print(self)
-            print(other)
-            raise ValueError
-
-        return UnionClassExpression(name=name, length=self.length + other.length + 1,
-                                    str_individuals=self.str_individuals.union(other.str_individuals),
-                                    expression_chain=((self.expression_chain + (self.name,)), 'OR',
-                                                      (other.expression_chain + (other.name,))))
 
 
 class AtomicExpression(ClassExpression):
@@ -246,44 +179,7 @@ class AtomicExpression(ClassExpression):
         self.idx_individuals = idx_individuals
 
     def __str__(self):
-        return f'AtomicExpression at {hex(id(self))} | {self.name} | Indv:{self.num_individuals} | Quality:{self.quality}'  # | expression_chain:{self.expression_chain}'
-
-    def __mul__(self, other):
-        if self.length <= 2 and other.length <= 2:
-            name = f'{self.name} ⊓ {other.name}'
-        elif self.length <= 2 < other.length:
-            name = f'{self.name} ⊓ ({other.name})'
-        elif self.length > other.length <= 2:
-            name = f'({self.name}) ⊓ {other.name}'
-        elif self.length >= 2 and other.length >= 2:
-            name = f'({self.name}) ⊓ ({other.name})'
-        else:
-            print(self)
-            print(other)
-            raise ValueError
-        return IntersectionClassExpression(name=name, length=self.length + other.length + 1,
-                                           str_individuals=self.str_individuals.intersection(other.str_individuals),
-                                           expression_chain=((self.expression_chain + (self.name,)), 'AND',
-                                                             (other.expression_chain + (other.name,))))
-
-    def __add__(self, other):
-        if self.length <= 2 and other.length <= 2:
-            name = f'{self.name} ⊔ {other.name}'
-        elif self.length <= 2 < other.length:
-            name = f'{self.name} ⊔ ({other.name})'
-        elif self.length > other.length <= 2:
-            name = f'({self.name}) ⊔ {other.name}'
-        elif self.length >= 2 and other.length >= 2:
-            name = f'({self.name}) ⊔ ({other.name})'
-        else:
-            print(self)
-            print(other)
-            raise ValueError
-
-        return UnionClassExpression(name=name, length=self.length + other.length + 1,
-                                    str_individuals=self.str_individuals.union(other.str_individuals),
-                                    expression_chain=((self.expression_chain + (self.name,)), 'OR',
-                                                      (other.expression_chain + (other.name,))))
+        return f'AtomicExpression at {hex(id(self))} | {self.name} | Indv:{self.num_individuals} | Quality:{self.quality:.3f}'  # | expression_chain:{self.expression_chain}'
 
 
 class ComplementOfAtomicExpression(ClassExpression):
@@ -298,48 +194,12 @@ class ComplementOfAtomicExpression(ClassExpression):
         self.idx_individuals = idx_individuals
 
     def __str__(self):
-        return f'ComplementOfAtomicExpression at {hex(id(self))} | {self.name} | Indv:{self.num_individuals} | Quality:{self.quality}'  # | expression_chain:{self.expression_chain}'
-
-    def __mul__(self, other):
-        if self.length <= 2 and other.length <= 2:
-            name = f'{self.name} ⊓ {other.name}'
-        elif self.length <= 2 < other.length:
-            name = f'{self.name} ⊓ ({other.name})'
-        elif self.length > other.length <= 2:
-            name = f'({self.name}) ⊓ {other.name}'
-        elif self.length >= 2 and other.length >= 2:
-            name = f'({self.name}) ⊓ ({other.name})'
-        else:
-            print(self)
-            print(other)
-            raise ValueError
-        return IntersectionClassExpression(name=name, length=self.length + other.length + 1,
-                                           str_individuals=self.str_individuals.intersection(other.str_individuals),
-                                           expression_chain=((self.expression_chain + (self.name,)), 'AND',
-                                                             (other.expression_chain + (other.name,))))
-
-    def __add__(self, other):
-        if self.length <= 2 and other.length <= 2:
-            name = f'{self.name} ⊔ {other.name}'
-        elif self.length <= 2 < other.length:
-            name = f'{self.name} ⊔ ({other.name})'
-        elif self.length > other.length <= 2:
-            name = f'({self.name}) ⊔ {other.name}'
-        elif self.length >= 2 and other.length >= 2:
-            name = f'({self.name}) ⊔ ({other.name})'
-        else:
-            print(self)
-            print(other)
-            raise ValueError
-
-        return UnionClassExpression(name=name, length=self.length + other.length + 1,
-                                    str_individuals=self.str_individuals.union(other.str_individuals),
-                                    expression_chain=((self.expression_chain + (self.name,)), 'OR',
-                                                      (other.expression_chain + (other.name,))))
+        return f'ComplementOfAtomicExpression at {hex(id(self))} | {self.name} | Indv:{self.num_individuals} | Quality:{self.quality:.3f}'  # | expression_chain:{self.expression_chain}'
 
 
 class UniversalQuantifierExpression(ClassExpression):
-    def __init__(self, *, name: str, role=None, filler=None, label_id=None,idx_individuals=None,str_individuals: Set, expression_chain: List, quality=None):
+    def __init__(self, *, name: str, role=None, filler=None, label_id=None, idx_individuals=None, str_individuals: Set,
+                 expression_chain: List, quality=None):
         assert isinstance(name, str)
         assert isinstance(str_individuals, set)
         try:
@@ -349,7 +209,6 @@ class UniversalQuantifierExpression(ClassExpression):
             print('asdasd')
             print(name)
             raise ValueError
-            exit(1)
         super().__init__(name=name, str_individuals=str_individuals, expression_chain=expression_chain, quality=quality)
         self.role = role
         self.filler = filler
@@ -359,44 +218,7 @@ class UniversalQuantifierExpression(ClassExpression):
         self.length = 3
 
     def __str__(self):
-        return f'UniversalQuantifierExpression at {hex(id(self))} | {self.name} | Indv:{self.num_individuals} | Quality:{self.quality}'
-
-    def __mul__(self, other):
-        if self.length <= 2 and other.length <= 2:
-            name = f'{self.name} ⊓ {other.name}'
-        elif self.length <= 2 < other.length:
-            name = f'{self.name} ⊓ ({other.name})'
-        elif self.length > other.length <= 2:
-            name = f'({self.name}) ⊓ {other.name}'
-        elif self.length >= 2 and other.length >= 2:
-            name = f'({self.name}) ⊓ ({other.name})'
-        else:
-            print(self)
-            print(other)
-            raise ValueError
-        return IntersectionClassExpression(name=name, length=self.length + other.length + 1,
-                                           str_individuals=self.str_individuals.intersection(other.str_individuals),
-                                           expression_chain=((self.expression_chain + (self.name,)), 'AND',
-                                                             (other.expression_chain + (other.name,))))
-
-    def __add__(self, other):
-        if self.length <= 2 and other.length <= 2:
-            name = f'{self.name} ⊔ {other.name}'
-        elif self.length <= 2 < other.length:
-            name = f'{self.name} ⊔ ({other.name})'
-        elif self.length > other.length <= 2:
-            name = f'({self.name}) ⊔ {other.name}'
-        elif self.length >= 2 and other.length >= 2:
-            name = f'({self.name}) ⊔ ({other.name})'
-        else:
-            print(self)
-            print(other)
-            raise ValueError
-
-        return UnionClassExpression(name=name, length=self.length + other.length + 1,
-                                    str_individuals=self.str_individuals.union(other.str_individuals),
-                                    expression_chain=((self.expression_chain + (self.name,)), 'OR',
-                                                      (other.expression_chain + (other.name,))))
+        return f'UniversalQuantifierExpression at {hex(id(self))} | {self.name} | Indv:{self.num_individuals} | Quality:{self.quality:.3f}'
 
 
 class ExistentialQuantifierExpression(ClassExpression):
@@ -415,44 +237,7 @@ class ExistentialQuantifierExpression(ClassExpression):
         self.length = 3
 
     def __str__(self):
-        return f'ExistentialQuantifierExpression at {hex(id(self))} | {self.name} | Indv:{self.num_individuals} | Quality:{self.quality}'
-
-    def __mul__(self, other):
-        if self.length <= 2 and other.length <= 2:
-            name = f'{self.name} ⊓ {other.name}'
-        elif self.length <= 2 < other.length:
-            name = f'{self.name} ⊓ ({other.name})'
-        elif self.length > other.length <= 2:
-            name = f'({self.name}) ⊓ {other.name}'
-        elif self.length >= 2 and other.length >= 2:
-            name = f'({self.name}) ⊓ ({other.name})'
-        else:
-            print(self)
-            print(other)
-            raise ValueError
-        return IntersectionClassExpression(name=name, length=self.length + other.length + 1,
-                                           str_individuals=self.str_individuals.intersection(other.str_individuals),
-                                           expression_chain=((self.expression_chain + (self.name,)), 'AND',
-                                                             (other.expression_chain + (other.name,))))
-
-    def __add__(self, other):
-        if self.length <= 2 and other.length <= 2:
-            name = f'{self.name} ⊔ {other.name}'
-        elif self.length <= 2 < other.length:
-            name = f'{self.name} ⊔ ({other.name})'
-        elif self.length > other.length <= 2:
-            name = f'({self.name}) ⊔ {other.name}'
-        elif self.length >= 2 and other.length >= 2:
-            name = f'({self.name}) ⊔ ({other.name})'
-        else:
-            print(self)
-            print(other)
-            raise ValueError
-
-        return UnionClassExpression(name=name, length=self.length + other.length + 1,
-                                    str_individuals=self.str_individuals.union(other.str_individuals),
-                                    expression_chain=((self.expression_chain + (self.name,)), 'OR',
-                                                      (other.expression_chain + (other.name,))))
+        return f'ExistentialQuantifierExpression at {hex(id(self))} | {self.name} | Indv:{self.num_individuals} | Quality:{self.quality:.3f}'
 
 
 class Role:

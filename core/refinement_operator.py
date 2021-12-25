@@ -30,38 +30,13 @@ class SimpleRefinement(BaseRefinement):
         self.N_I = set([_.get_iri().as_str() for _ in self.kb.individuals(self.kb.thing)])
 
         self.expression = dict()  # str -> ClassExpression
+        self.str_nc_star=None# set()
         self.dict_sh_direct_down = dict()  # str -> str
         self.dict_sh_direct_up = dict()  # str -> str
 
         self.length_to_expression_str = dict()
         self.str_ae_to_neg_ae = dict()  # str -> Class Expression
         self.prepare()
-
-    def named_class_expressions(self):
-        return [i for i in self.expression_given_length(1) if i.name not in ['⊤', '⊥']]
-
-    def negated_named_class_expressions(self):
-        res = []
-        for i in self.named_class_expressions():
-            if i.name in self.str_ae_to_neg_ae:
-                neg_i = self.str_ae_to_neg_ae[i.name]
-            else:
-                neg_i = self.negate_atomic_class(i)
-            res.append(neg_i)
-        return res
-
-    def negate_atomic_class(self, i):
-        neg_i = ComplementOfAtomicExpression(
-            name='¬' + i.name,
-            atomic_expression=i,
-            str_individuals=self.N_I.difference(i.str_individuals),
-            expression_chain=(i.expression_chain[-1], 'NEG',))
-        self.__store(neg_i, length=2)
-        self.str_ae_to_neg_ae[i.name] = neg_i
-        return neg_i
-
-    def all_quantifiers(self):
-        return [i for i in self.expression_given_length(3)]
 
     def prepare(self):
         """
@@ -143,23 +118,48 @@ class SimpleRefinement(BaseRefinement):
                 self.__store(neg_i, length=2)
                 self.str_ae_to_neg_ae[i.name] = neg_i
                 self.top_refinements.setdefault(neg_i.length, set()).add(neg_i)
+        for i in self.negated_named_class_expressions():
+            self.__store(i, length=2)
+
+        self.str_nc_star=set(list(self.expression.keys()))
+    def __store(self, target, length):
+        if len(target.str_individuals) > 0 or target.name == '⊥':
+            # Ignore all empty expression except bottom
+            self.expression[target.name] = target
+            self.length_to_expression_str.setdefault(length, set()).add(target)
+
+    def named_class_expressions(self):
+        return [i for i in self.expression_given_length(1) if i.name not in ['⊤', '⊥']]
+
+    def negated_named_class_expressions(self):
+        res = []
+        for i in self.named_class_expressions():
+            if i.name in self.str_ae_to_neg_ae:
+                neg_i = self.str_ae_to_neg_ae[i.name]
+            else:
+                neg_i = self.negate_atomic_class(i)
+            res.append(neg_i)
+        return res
+
+    def negate_atomic_class(self, i):
+        neg_i = ComplementOfAtomicExpression(
+            name='¬' + i.name,
+            atomic_expression=i,
+            str_individuals=self.N_I.difference(i.str_individuals),
+            expression_chain=(i.expression_chain[0],)  # neg_i in \rho(i)
+        )
+        self.__store(neg_i, length=2)
+        self.str_ae_to_neg_ae[i.name] = neg_i
+        return neg_i
+
+    def all_quantifiers(self):
+        return [i for i in self.expression_given_length(3)]
 
     def refine_top_with_length(self, length):
         # 1 => sh_down(T)
         # 2 => sh_down(T) negatied leaf nodes
         # 3 => all quantifiers
         return self.top_refinements[length]
-
-    def __negative_atomic_exp(self, ae, neg_ae):
-        assert isinstance(ae, AtomicExpression)
-        target = ComplementOfAtomicExpression(
-            name='¬' + ae.name,
-            atomic_expression=ae,
-            str_individuals=self.N_I.difference(ae.str_individuals),
-            expression_chain=neg_ae.expression_chain + (neg_ae.name,))
-        self.__store(target, length=2)
-        self.str_ae_to_neg_ae[ae.name] = target
-        return target
 
     def __refine_top_direct_nc(self, ce=None):
         """ (1) {A | A ∈ N_C , A \sqcap B notequiv ⊥, A \sqcap B notequiv  B,
@@ -184,36 +184,55 @@ class SimpleRefinement(BaseRefinement):
                 if str_ in self.expression:
                     yield ce * self.expression[str_]
 
-    def chain_gen(self, x: tuple, expression=None) -> List[ClassExpression]:
+    def check_sequence_of_atomic(self, s):
+        """
+        tuple of strings
+        :param s:
+        :return:
+        """
+        for i in s:
+            if i not in self.str_nc_star:
+                return False
+        return True
 
-        if x is None:
-            return expression
+    def construct_two_exp_from_chain(self, complex_exp):
+        x = complex_exp.expression_chain
+        assert isinstance(x, tuple)
+        assert len(x) == 3
+        assert x[1] in ['OR', 'AND']
+        a, _, b = x
+        left_concept, right_concept = None, None
+        if self.check_sequence_of_atomic(a) or len(a) == 3:
+            left_concept = self.chain_gen((a[1],))[0]
 
-        results = set()
-        for item in x:
-            if item == 'OR':
-                continue
-            if item == 'AND':
-                continue
-            # Item is a complex expression
-            if 'OR' in item or 'AND' in item:
-                return self.chain_gen(item, expression)
+        if self.check_sequence_of_atomic(b) or len(b) == 3:
+            right_concept = self.chain_gen((b[1],))[0]
 
-            if isinstance(item, tuple):
-                if 'NEG' in item:
-                    assert len(item) == 3
-                    class_exp_last, opt, class_exp_next = item
-                    if class_exp_next in self.expression:
-                        results.add(self.expression[class_exp_next])
-                    else:
-                        # ¬Child to Child
-                        results.add(self.negate_atomic_class(self.expression[class_exp_next[1:]]))
-                else:
-                    for i in item:
-                        results.add(self.expression[i])
-            else:
-                results.add(self.expression[item])
-        return results
+        if right_concept and left_concept:
+            return right_concept, left_concept
+
+        print(a)
+        print(b)
+        raise ValueError('Not found')
+
+    def chain_gen(self, x: tuple) -> List[ClassExpression]:
+        if len(x) == 1:
+            return [self.expression[x[0]]]
+        elif len(x) == 2:
+            return self.chain_gen((x[0],)) + self.chain_gen((x[1],))
+        elif len(x) == 3 and x[1] in ['OR', 'AND']:
+            a, _, b = x
+            left_path = self.chain_gen(a)
+            right_path = self.chain_gen(b)
+            return left_path + right_path
+        elif len(x) >= 3:
+            res = []
+            for i in x:
+                res.extend(self.chain_gen((i,)))
+            return res
+        else:
+            print(x)
+            raise ValueError
 
     def expression_from_str(self, x: tuple) -> ClassExpression:
         try:
@@ -276,12 +295,6 @@ class SimpleRefinement(BaseRefinement):
                 exit(1)
         """
 
-    def __store(self, target, length):
-        if len(target.str_individuals)>0 or target.name=='⊥':
-            # Ignore all empty expression except bottom
-            self.expression[target.name] = target
-            self.length_to_expression_str.setdefault(length, set()).add(target)
-
     def expression_given_length(self, length: int):
         if length in self.length_to_expression_str:
             return [i for i in self.length_to_expression_str[length]]
@@ -340,16 +353,14 @@ class SimpleRefinement(BaseRefinement):
         yield from self.intersect_with_top([atomic_class_expression])
 
     def intersect_with_top(self, res):
-        length_top_refs = len(self.top_refinements)
         refs_to_add_top = set()
-        for ith_length in range(1, length_top_refs + 1):
-            for v in self.top_refinements[ith_length]:
-                if len(v.str_individuals) > 0:
-                    for j in res:
-                        if len(j.str_individuals) > 0 and len(v.str_individuals.intersection(j.str_individuals)) > 0:
-                            iandj = v * j
-                            refs_to_add_top.add(iandj)
-                            yield iandj
+        for v in self.top_refinements.values():
+            for i in v:
+                for j in res:
+                    if len(j.str_individuals) > 0 and len(i.str_individuals.intersection(j.str_individuals)) > 0:
+                        iandj = i * j
+                        refs_to_add_top.add(iandj)
+                        yield iandj
         for i in refs_to_add_top:
             self.top_refinements.setdefault(i.length, set()).add(i)
 
@@ -364,6 +375,8 @@ class SimpleRefinement(BaseRefinement):
             if ae.name in self.str_ae_to_neg_ae:
                 res.append(self.str_ae_to_neg_ae[ae.name])
             else:
+                print(ae)
+                exit(1)
                 res.append(self.__negative_atomic_exp(ae, compement_of_atomic_class_expression))
 
         yield from res
@@ -386,29 +399,26 @@ class SimpleRefinement(BaseRefinement):
         """
         yield from self.intersect_with_top([eqe])
 
-    def get_operands(self, x):
-        a_part, _, b_part = x.expression_chain
-        a = self.expression[a_part[-1]]
-        b = self.expression[b_part[-1]]
-        return a, b
+    def refine_union_or_intersection(self, x, key=None):
+        """
+
+        :param x:
+        :param key:
+        :return:
+        """
+        a, b = x.concepts
+        for x in self.refine(a):
+            if len(x.str_individuals) > 0 and len(x.str_individuals.intersection(b.str_individuals)) > 0:
+                yield key(x, b)
+        for x in self.refine(b):
+            if len(x.str_individuals) > 0 and len(x.str_individuals.intersection(a.str_individuals)) > 0:
+                yield key(x, a)
 
     def refine_union_expression(self, ue):
-        a, b = self.get_operands(ue)
-        for x in self.refine(a):
-            if len(x.str_individuals) > 0 and len(x.str_individuals.intersection(b.str_individuals))>0:
-                yield x+b
-        for x in self.refine(b):
-            if len(x.str_individuals) > 0 and len(x.str_individuals.intersection(a.str_individuals))>0:
-                yield x+a
+        yield from self.refine_union_or_intersection(ue, key=lambda x, y: x + y)
 
     def refine_intersection_expression(self, ie):
-        a, b = self.get_operands(ie)
-        for x in self.refine(a):
-            if len(x.str_individuals) > 0 and len(x.str_individuals.intersection(b.str_individuals))>0:
-                yield x*b
-        for x in self.refine(b):
-            if len(x.str_individuals) > 0 and len(x.str_individuals.intersection(a.str_individuals))>0:
-                yield x*a
+        yield from self.refine_union_or_intersection(ie, key=lambda x, y: x * y)
 
     def refine(self, class_expression) -> Iterable:
         if isinstance(class_expression, AtomicExpression):
@@ -425,5 +435,5 @@ class SimpleRefinement(BaseRefinement):
             yield from self.refine_intersection_expression(class_expression)
         else:
             print(class_expression)
-            print('WRong Type ')
+            print('Incorrect type')
             raise ValueError

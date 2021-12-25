@@ -25,12 +25,13 @@ import pandas
 from core.expression import *
 
 
-def load_target_class_expressions_and_instance_idx_mapping(path_of_experiment_folder):
+def load_target_class_expressions_and_instance_idx_mapping(path_of_experiment_folder,rho):
     """
 
     :param args:
     :return:
     """
+
     # target_class_expressions Must be empty and must be filled in an exactorder
     target_class_expressions = []
     df = pd.read_csv(path_of_experiment_folder + '/target_class_expressions.csv', index_col=0)
@@ -40,12 +41,28 @@ def load_target_class_expressions_and_instance_idx_mapping(path_of_experiment_fo
         else:
             length_info = v['length']
         if v['type'] == 'atomic_expression':
-            assert v['length'] == 1
+            t=rho.expression[v['name']]
+            t.label_id=int(v['label_id'])
+            t.idx_individuals=eval(v['idx_individuals'])
+            """
             t = AtomicExpression(label_id=v['label_id'],
                                  name=v['name'],
                                  str_individuals=eval(v['str_individuals']),
                                  idx_individuals=eval(v['idx_individuals']),
                                  expression_chain=eval(v['expression_chain']))
+            """
+        elif v['type'] == 'negated_expression':
+            t=rho.expression[v['name']]
+            t.label_id=int(v['label_id'])
+            t.idx_individuals=eval(v['idx_individuals'])
+            """
+            t = ComplementOfAtomicExpression(label_id=v['label_id'],
+                                            name=v['name'],
+                                             atomic_expression=rho.expression[v['atomic_expression']],
+                                            str_individuals=eval(v['str_individuals']),
+                                            idx_individuals=eval(v['idx_individuals']),
+                                            expression_chain=eval(v['expression_chain']))
+            """
         elif v['type'] == 'intersection_expression':
             t = IntersectionClassExpression(label_id=v['label_id'],
                                             name=v['name'], length=length_info,
@@ -77,9 +94,7 @@ def load_target_class_expressions_and_instance_idx_mapping(path_of_experiment_fo
             print(v['type'])
             raise ValueError
         assert len(t.idx_individuals) == len(eval(v['idx_individuals']))
-
         target_class_expressions.append(t)
-
     instance_idx_mapping = dict()
     with open(path_of_experiment_folder + '/instance_idx_mapping.json', 'r') as f:
         instance_idx_mapping.update(json.load(f))
@@ -103,15 +118,19 @@ def load_pytorch_module(args: Dict, path_of_experiment_folder) -> torch.nn.Modul
     return model
 
 
-def load_ncel(path_of_experiment_folder: str) -> NERO:
+def load_ncel(path_of_experiment_folder: str,path_knowledge_base) -> NERO:
     # (1) Load the configuration setting.
     settings = dict()
     with open(path_of_experiment_folder + '/settings.json', 'r') as f:
         settings.update(json.load(f))
 
+    kb = KnowledgeBase(path=path_knowledge_base,
+                       reasoner_factory=ClosedWorld_ReasonerFactory)
+    rho = SimpleRefinement(knowledge_base=kb)
+
     # (2) Load target class expressions & instance_idx_mapping
     target_class_expressions, instance_idx_mapping = load_target_class_expressions_and_instance_idx_mapping(
-        path_of_experiment_folder)
+        path_of_experiment_folder,rho)
     # (1) Load Pytorch Module
     model = load_pytorch_module(settings, path_of_experiment_folder)
 
@@ -142,7 +161,7 @@ def run(args):
     path_dl_learner = args.path_dl_learner
     path_dl_learner = None
     path_of_json_learning_problems = args.path_of_json_learning_problems
-    ncel_model = load_ncel(args.path_of_experiment_folder)
+    ncel_model = load_ncel(args.path_of_experiment_folder,path_knowledge_base)
 
     lp = dict()
     with open(path_of_json_learning_problems, 'r') as f:

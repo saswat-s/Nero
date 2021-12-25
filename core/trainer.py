@@ -134,9 +134,9 @@ class Trainer:
             start_time = time.time()
             self.logger.info('Training starts.')
 
-            self.validate(model, [self.learning_problems[i] for i in range(num_val_lp)],
-                          args=self.args,
-                          info='Validation on few training data points with random weights starts')
+            #self.validate(model, [self.learning_problems[i] for i in range(num_val_lp)],
+            #              args=self.args,
+            #              info='Validation on few training data points with random weights starts')
             model.train()
 
             # (5) Iterate training data

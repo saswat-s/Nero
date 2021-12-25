@@ -350,30 +350,20 @@ def uncorrelated_target_expression_selection(kb, number_of_target_expressions,
     num_of_all_individuals = kb.individuals_count()
     assert len(instance_idx_mapping) == num_of_all_individuals
 
-    nc=rho.named_class_expressions()
-    neg_nc=rho.negated_named_class_expressions()
-    q=rho.all_quantifiers()
+    nc = rho.named_class_expressions()
+    neg_nc = rho.negated_named_class_expressions()
+    q = rho.all_quantifiers()
     uncorrelated_refinements = reduce_redundancy(nc + neg_nc + q)
     del nc, neg_nc, q
     gc.collect()
+
     while len(uncorrelated_refinements) != number_of_target_expressions:
         uncorrelated_refinements = combinatorial(uncorrelated_refinements, number_of_target_expressions)
     result = []
     for ith, ce in enumerate(sorted(uncorrelated_refinements, key=lambda x: x.length)):
-        ce.label_id=ith
+        ce.label_id = ith
         ce.idx_individuals = set(instance_idx_mapping[i] for i in ce.str_individuals)
         result.append(ce)
-
-        """
-        result.append(TargetClassExpression(
-            label_id=ith,
-            name=ce.name,
-            idx_individuals=set(instance_idx_mapping[i] for i in ce.str_individuals),
-            length=ce.length,
-            expression_chain=ce.expression_chain
-        ))
-        """
-
     gc.collect()
     logger.info(
         f'{len(result)} number of target expressions are obtained.')

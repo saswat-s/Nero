@@ -50,8 +50,8 @@ class ExpressionQueue:
 
 
 class SearchTree:
-    def __init__(self):
-        self.items_in_queue = PriorityQueue()
+    def __init__(self,maxsize=0):
+        self.items_in_queue = PriorityQueue(maxsize)
         self.gate = dict()
 
     def put(self, expression,key=None):

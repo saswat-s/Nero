@@ -43,8 +43,6 @@ if __name__ == '__main__':
                         help='Input set size |E^+| and |E^-|.')
     parser.add_argument("--num_of_learning_problems_training", type=int, default=1,
                         help='Total number of LP => this val x |target exp|.')
-    parser.add_argument("--num_of_learning_problems_testing", type=int, default=None,
-                        help='Total number of randomly generated learning problems for testing.')
 
     # Neural related
     parser.add_argument("--neural_architecture", type=str,
@@ -52,13 +50,13 @@ if __name__ == '__main__':
                         help='[ST(Set Transformer),DeepSet]')
     parser.add_argument("--quality_function_training", type=str,
                         default='fmeasure',
-                        help='[accuracy,fmeasure, perfectfmeasure]') # perfectfmeasure multi-label class.
+                        help='[accuracy,fmeasure]') # ce goal, E^+ and not E^-?.
     parser.add_argument("--loss_func", type=str,
                         default='MSELoss',
                         help='[MSELoss,HuberLoss,CrossEntropyLoss]')
 
     parser.add_argument("--number_of_target_expressions", type=int,
-                        default=1000)
+                        default=3000)
 
     parser.add_argument("--target_expression_selection", type=str,
                         default='uncorrelated_target_expression_selection',
@@ -73,17 +71,17 @@ if __name__ == '__main__':
     parser.add_argument("--num_embedding_dim", type=int, default=100, help='Number of embedding dimensions.')
     # Training Related
     parser.add_argument("--learning_rate", type=float, default=0.01, help='Learning Rate')
-    parser.add_argument("--num_epochs", type=int, default=100, help='Number of iterations over the entire dataset.')
+    parser.add_argument("--num_epochs", type=int, default=50, help='Number of iterations over the entire dataset.')
     parser.add_argument("--val_at_every_epochs", type=int, default=500, help='How often eval.')
 
     parser.add_argument("--batch_size", type=int, default=1024)
     # Inference Related
-    parser.add_argument("--topK", type=int, default=10,
+    parser.add_argument("--topK", type=int, default=100,
                         help='Test the highest topK target expressions')
 
     # Analysis Related
     parser.add_argument("--plot_embeddings", type=int, default=0, help='1 => Yes, 0 => No')
-    parser.add_argument('--use_search', default='SmartInit', help='Continues,None,SmartInit')
+    parser.add_argument('--use_search', default='None', help='Continues,None,SmartInit')
 
     parser.add_argument("--eval_dl_learner", type=int, default=0, help='1 => Yes, 0 => No')
     main(vars(parser.parse_args()))

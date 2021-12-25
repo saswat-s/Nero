@@ -22,10 +22,7 @@ class NERO:
             zip(self.instance_idx_mapping.values(), self.instance_idx_mapping.keys()))
         # expression ordered by id.
         self.target_class_expressions = target_class_expressions
-        # Sanity checking
-        # for i in self.target_class_expressions:
-        #    if i.str_individuals is None:
-        #        i.str_individuals = { self.inverse_instance_idx_mapping[i] for i in i.idx_individuals}
+
         self.str_target_class_expression_to_label_id = {i.name: i.label_id for i in self.target_class_expressions}
 
         self.renderer = DLSyntaxObjectRenderer()
@@ -108,15 +105,8 @@ class NERO:
     def retrieval_of_individuals(self, target_class_expression):
         return {self.inverse_instance_idx_mapping[_] for _ in target_class_expression.idx_individuals}
 
+    """
     def predict(self, str_pos: [str], str_neg: [str], topK: int = None, local_search=True) -> ExpressionQueue:
-        """
-
-        :param str_pos: string rep of E^+
-        :param str_neg: string rep of E^+
-        :param topK: number of top ranked expressions to be tested
-        :param local_search: Return a queue of top ranked expressions sorted as descending order of qualities
-        :return:
-        """
         start_time = time.time()
         self.predict_sanity_checking(pos=str_pos, neg=str_neg, topK=topK)
         set_pos, set_neg = set(str_pos), set(str_neg)
@@ -146,64 +136,7 @@ class NERO:
         # If Goal is not found in top K predictions
         # Later call CELOE if goal not found
         return results, len(results), time.time() - start_time
-
-    def search_with_init(self, kb_path, top_prediction_queue, set_pos, set_neg):
-        """
-        Standard search with smart initialization
-
-        :param top_prediction_queue:
-        :param rho:
-        :param set_pos:
-        :param set_neg:
-        :return:
-        """
-        kb = KnowledgeBase(path=kb_path,
-                           reasoner_factory=ClosedWorld_ReasonerFactory)
-        rho = SimpleRefinement(knowledge_base=kb)
-        heuristic_st = SearchTree()
-        goal_found = False
-        # (2) Iterate over advantages states
-        while len(top_prediction_queue) > 0:
-            # (2.1) Get top ranked Description Logic Expressions: C
-            nero_mode_class_expression = top_prediction_queue.get()
-            # (2.2) Compute heuristic val: C
-            heuristic_st.put(nero_mode_class_expression,
-                             key=-nero_mode_class_expression.quality / nero_mode_class_expression.length)
-            # (2.3) Add a path from T ->... ->C
-            for class_expression_c in rho.chain_gen(nero_mode_class_expression.expression_chain):
-                # (2.3.) Obtain Path from T-> C
-                if class_expression_c not in heuristic_st:
-                    class_expression_c.quality = self.call_quality_function(
-                        set_str_individual=class_expression_c.str_individuals,
-                        set_str_pos=set_pos,
-                        set_str_neg=set_neg)
-                    # (2.4.) Add states into tree
-                    heuristic_st.put(class_expression_c, key=-class_expression_c.quality / class_expression_c.length)
-                    if class_expression_c.quality == 1:
-                        goal_found = True
-                        break
-                else:
-                    """ Ignore class_expression_c"""
-            if goal_found:
-                break
-
-        exploited_states = SearchTree()
-
-        for i in range(1):
-            s = heuristic_st.get()
-            exploited_states.put(s, key=-s.quality / s.length)
-
-            for x in rho.refine(s):
-                if len(x.str_individuals):
-                    x.quality = self.call_quality_function(
-                        set_str_individual=x.str_individuals,
-                        set_str_pos=set_pos,
-                        set_str_neg=set_neg)
-                    exploited_states.put(x, key=-x.quality / x.length)
-                if x.quality == 1.0:
-                    break
-        exploited_states.extend_queue(heuristic_st)
-        return exploited_states
+    """
 
     def fit(self, str_pos: [str], str_neg: [str], topK: int = None, use_search=None, kb_path=None) -> Dict:
         """
@@ -231,10 +164,14 @@ class NERO:
 
         # (3) Predict scores and sort index target expressions in descending order of assigned scores.
         sort_val, sort_idxs = torch.sort(self.forward(xpos=torch.LongTensor([idx_pos]),
-                                               xneg=torch.LongTensor([idx_neg])), dim=1, descending=True)
+                                                      xneg=torch.LongTensor([idx_neg])), dim=1, descending=True)
         sort_idxs = sort_idxs.cpu().numpy()[0]
+        sort_val = sort_val.detach().numpy()[0]
+
         # (4) Iterate over the sorted index of target expressions.
-        for idx_target in sort_idxs[:topK]:
+        for ith_rank in range(topK):
+            predicted_quality = sort_val[ith_rank]
+            idx_target = sort_idxs[ith_rank]
             # (5) Retrieval of instance.
             str_instances = self.retrieval_of_individuals(self.target_class_expressions[idx_target])
 
@@ -242,21 +179,14 @@ class NERO:
             quality_score = self.call_quality_function(set_str_individual=str_instances,
                                                        set_str_pos=set_pos,
                                                        set_str_neg=set_neg)
-            self.target_class_expressions[idx_target].quality=quality_score
+            # print(f'Pred. Quality {predicted_quality}, True:{quality_score}')
+            self.target_class_expressions[idx_target].quality = quality_score
             # (7) Put CE into the priority queue.
             top_prediction_queue.put(self.target_class_expressions[idx_target], key=-quality_score)
-            """
-            top_prediction_queue.put(ClassExpression(name=self.target_class_expressions[idx_target].name,
-                                                     str_individuals=str_instances,
-                                                     expression_chain=self.target_class_expressions[
-                                                         idx_target].expression_chain,
-                                                     quality=quality_score), key=-quality_score)
-            """
             # (8) If goal is found, we do not need to compute scores.
             if quality_score == 1.0:
                 goal_found = True
                 break
-
         # (9) IF goal is not found, we do search
         if goal_found is False:
             if use_search == 'Continues':
@@ -273,7 +203,7 @@ class NERO:
                 best_constructed_expression = top_prediction_queue.get()
                 if best_constructed_expression > best_pred:
                     best_pred = best_constructed_expression
-            elif use_search=='None' or use_search is None:
+            elif use_search == 'None' or use_search is None:
                 best_pred = top_prediction_queue.get()
             else:
                 print(use_search)
@@ -290,11 +220,73 @@ class NERO:
                   }
         return report
 
-    def generate_expression(self, *, i, kb, expression_chain):
-        expression = ClassExpression(name=self.renderer.render(i),
-                                     str_individuals=set([_.get_iri().as_str() for _ in kb.individuals(i)]),
-                                     expression_chain=expression_chain)
-        return expression
+    def search_with_init(self, kb_path, top_prediction_queue, set_pos, set_neg):
+        """
+        Standard search with smart initialization
+
+        :param top_prediction_queue:
+        :param rho:
+        :param set_pos:
+        :param set_neg:
+        :return:
+        """
+        kb = KnowledgeBase(path=kb_path,
+                           reasoner_factory=ClosedWorld_ReasonerFactory)
+        rho = SimpleRefinement(knowledge_base=kb)
+
+        heuristic_st = SearchTree()
+        goal_found = False
+        # (2) Iterate over advantages states
+        while len(top_prediction_queue) > 0:
+            # (2.1) Get top ranked Description Logic Expressions: C
+            nero_mode_class_expression = top_prediction_queue.get()
+            if nero_mode_class_expression.type in ['union_expression','intersection_expression']:
+                nero_mode_class_expression.concepts=rho.construct_two_exp_from_chain(nero_mode_class_expression)
+
+            # (2.2) Compute heuristic val: C
+            heuristic_st.put(nero_mode_class_expression,
+                             key=-nero_mode_class_expression.quality)
+            # (2.3) Add a path from T ->... ->C
+            for class_expression_c in rho.chain_gen(nero_mode_class_expression.expression_chain):
+                # (2.3.) Obtain Path from T-> C
+                if class_expression_c not in heuristic_st and class_expression_c not in top_prediction_queue:
+                    class_expression_c.quality = self.call_quality_function(
+                        set_str_individual=class_expression_c.str_individuals,
+                        set_str_pos=set_pos,
+                        set_str_neg=set_neg)
+                    # (2.4.) Add states into tree
+                    heuristic_st.put(class_expression_c,
+                                     key=-class_expression_c.quality)
+                    if class_expression_c.quality == 1:
+                        goal_found = True
+                        break
+                else:
+                    """ Ignore class_expression_c"""
+            if goal_found:
+                break
+
+        explored_states = SearchTree()
+        exploited_states = SearchTree()
+        explored_states.extend_queue(heuristic_st)
+
+        for i in range(3):
+            s = explored_states.get()
+            if s in exploited_states:
+                continue
+            exploited_states.put(s, key=-s.quality)
+
+            for x in rho.refine(s):
+                if len(x.str_individuals) and (x not in explored_states or x not in exploited_states):
+                    x.quality = self.call_quality_function(
+                        set_str_individual=x.str_individuals,
+                        set_str_pos=set_pos,
+                        set_str_neg=set_neg)
+                    explored_states.put(x, key=-x.quality)
+                if x.quality == 1.0:
+                    break
+
+        exploited_states.extend_queue(explored_states)
+        return exploited_states
 
     def apply_continues_search(self, top_states, set_str_pos: Set[str], set_str_neg: Set[str]):
         """
@@ -313,18 +305,29 @@ class NERO:
         # (2) Get embeddings of E^-.
         neg_emb = self.negative_expression_embeddings(set_str_neg)
         last_sim = None
+
+        sim = torch.nn.functional.mse_loss(input=neg_emb, target=pos_emb)
+
+        print(sim)
+        exit(1)
         st = []
-        small = []
         # (3) Iterate over most promising states and compute similarity scores between E^+ and E^-
-        while len(top_states)>0:
-            i=top_states.get()
+        while len(top_states) > 0:
+            i = top_states.get()
+
+            full_coverage = len(i.str_individuals.intersection(set_str_pos)) / len(set_str_pos)
+
+            if full_coverage == 1.0:
+                fp = len(i.str_individuals.intersection(set_str_neg))
+                st.append((fp, i))
+            continue
             target_emb = self.positive_expression_embeddings(i.str_individuals)
-            e_pos_idst=torch.cdist(target_emb, pos_emb, p=2).numpy()[0][0]
-            e_neg_idst=torch.cdist(target_emb, neg_emb, p=2).numpy()[0][0]
-            #print(f'{i} | dist. Pos: {e_pos_idst:.3f} |dist. Neg:{e_neg_idst:.3f}')
-            #print(f'{i} | Semantic Dist: {e_neg_idst-e_pos_idst:.3f}')
-            semantic_dist=e_neg_idst-e_pos_idst
-            st.append((semantic_dist,i))
+            e_pos_idst = torch.cdist(target_emb, pos_emb, p=2).numpy()[0][0]
+            e_neg_idst = torch.cdist(target_emb, neg_emb, p=2).numpy()[0][0]
+            # print(f'{i} | dist. Pos: {e_pos_idst:.3f} |dist. Neg:{e_neg_idst:.3f}')
+            # print(f'{i} | Semantic Dist: {e_neg_idst-e_pos_idst:.3f}')
+            semantic_dist = e_pos_idst - e_neg_idst
+            st.append((semantic_dist, i))
             """
             # (4) Embedding of most promising state
             target_emb = self.positive_expression_embeddings(i.str_individuals)
@@ -339,27 +342,38 @@ class NERO:
                 small.append(i)
                 last_sim = sim
             """
-        for _,i in st:
-            print(_,i)
+        st = sorted(st, key=lambda x: x[0], reverse=False)  # aschending order
+
+        for _, i in st:
+            print(i, _)
 
         exit(1)
-        st=sorted(st,key=lambda x:x[0],reverse=True)
-        #small=sorted(small,key=lambda x:x[1],reverse=True)
-        for _,i in st:
-            for _,j in st:
+        st = sorted(st, key=lambda x: x[0], reverse=False)  # aschending order
+        for _, i in st[:10]:
+            print(_, i)
+        print('###')
+        st = sorted(st, key=lambda x: x[1].quality, reverse=True)
+        for _, i in st[:10]:
+            print(_, i)
+
+        exit(1)
+
+        # small=sorted(small,key=lambda x:x[1],reverse=True)
+        for _, i in st:
+            for _, j in st:
                 if i == j:
                     continue
                 if i.str_individuals == j.str_individuals:
                     continue
 
-                tp_i_str_pos=i.str_individuals.intersection(set_str_pos)
-                tp_j_str_pos=j.str_individuals.intersection(set_str_pos)
+                tp_i_str_pos = i.str_individuals.intersection(set_str_pos)
+                tp_j_str_pos = j.str_individuals.intersection(set_str_pos)
 
-                fp_i_str_pos=i.str_individuals.intersection(set_str_neg)
-                fp_j_str_pos=j.str_individuals.intersection(set_str_neg)
+                fp_i_str_pos = i.str_individuals.intersection(set_str_neg)
+                fp_j_str_pos = j.str_individuals.intersection(set_str_neg)
 
-                tp_coefficient=len(tp_i_str_pos.intersection(tp_j_str_pos)) / (len(tp_j_str_pos)+len(tp_i_str_pos))
-                fp_coefficient=len(fp_i_str_pos.intersection(fp_j_str_pos)) / (len(fp_i_str_pos)+len(fp_j_str_pos))
+                tp_coefficient = len(tp_i_str_pos.intersection(tp_j_str_pos)) / (len(tp_j_str_pos) + len(tp_i_str_pos))
+                fp_coefficient = len(fp_i_str_pos.intersection(fp_j_str_pos)) / (len(fp_i_str_pos) + len(fp_j_str_pos))
 
                 print(tp_coefficient)
                 print(fp_coefficient)
@@ -392,105 +406,6 @@ class NERO:
                 break
         assert len(top_states) <= max_size
 
-    def apply_continues_search_with_negatives(self, top_states, st_to_intersect, set_str_pos: Set[str],
-                                              set_str_neg: Set[str]):
-        """
-
-        :param kb:
-        :param top_states:
-        :param set_str_pos:
-        :param set_str_neg:
-        :return:
-        """
-        st = SearchTree()
-        result = SearchTree()
-        for i in top_states:
-            for j in st_to_intersect:
-                i_and_j = i * j
-                i_and_j.quality = self.call_quality_function(set_str_individual=i_and_j.str_individuals,
-                                                             set_str_pos=set_str_pos,
-                                                             set_str_neg=set_str_neg)
-                st.put(i_and_j)
-                if len(st) == top_states:
-                    break
-            if len(st) == top_states:
-                break
-        result.extend_queue(st)
-        result.extend_queue(top_states)
-
-        return result
-
-    def apply_combinatorial_local_search(self, kb: KnowledgeBase, most_promissing_states, set_str_pos: Set[str],
-                                         set_str_neg: Set[str]):
-        rho = SimpleRefinement(knowledge_base=kb)
-
-        st = SearchTree()
-        top_refinement_class_expressions = []
-        for i in rho.top_refinements:
-            if self.renderer.render(i) == '⊥':
-                continue
-            expression = self.generate_expression(i=i, kb=kb, expression_chain=['TOP'])
-            expression.quality = self.call_quality_function(set_str_individual=expression.str_individuals,
-                                                            set_str_pos=set_str_pos,
-                                                            set_str_neg=set_str_neg)
-            # Either Full coverage of Positives
-            if expression.str_individuals.issuperset(set_str_pos) > 0:
-                st.put(expression)
-                top_refinement_class_expressions.append(expression)
-
-            # Non coverage of negatives
-            elif len(expression.str_individuals & set_str_neg) == 0:
-                st.put(expression)
-                top_refinement_class_expressions.append(expression)
-            else:
-                """ Ignore concepts that do not capture all positives """
-        st2 = SearchTree()
-        # Iterate over refinements in descending order of quality
-        for i in st:
-            st2.put(i)
-            for j in top_refinement_class_expressions:
-                if i == j:
-                    continue
-
-                quality_intersection = self.call_quality_function(
-                    set_str_individual=i.str_individuals & j.str_individuals,
-                    set_str_pos=set_str_pos,
-                    set_str_neg=set_str_neg)
-                if quality_intersection > i.quality:
-                    i_and_j = i * j
-                    i_and_j.quality = quality_intersection
-                    st2.put(i_and_j)
-
-                quality_union = self.call_quality_function(set_str_individual=i.str_individuals | j.str_individuals,
-                                                           set_str_pos=set_str_pos,
-                                                           set_str_neg=set_str_neg)
-
-                if quality_union > i.quality:
-                    i_or_j = i + j
-                    i_or_j.quality = quality_union
-                    st2.put(i_or_j)
-
-        final_set = SearchTree()
-        for i in st2:
-            final_set.put(i)
-            for mps in most_promissing_states:
-                final_set.put(mps)
-                i_or_mps = i + mps
-                i_or_mps.quality = self.call_quality_function(set_str_individual=i_or_mps.str_individuals,
-                                                              set_str_pos=set_str_pos,
-                                                              set_str_neg=set_str_neg)
-                if mps.quality < i_or_mps.quality:
-                    final_set.put(i_or_mps)
-
-                i_and_mps = i * mps
-                i_and_mps.quality = self.call_quality_function(set_str_individual=i_and_mps.str_individuals,
-                                                               set_str_pos=set_str_pos,
-                                                               set_str_neg=set_str_neg)
-                if mps.quality < i_and_mps.quality:
-                    final_set.put(i_and_mps)
-
-        return final_set
-
     def __str__(self):
         return f'NERO with {self.model.name}'
 
@@ -514,3 +429,9 @@ class NERO:
 
     def get_target_class_expressions(self):
         return (self.renderer.render(cl.concept) for cl in self.target_class_expressions)
+
+    def generate_expression(self, *, i, kb, expression_chain):
+        expression = ClassExpression(name=self.renderer.render(i),
+                                     str_individuals=set([_.get_iri().as_str() for _ in kb.individuals(i)]),
+                                     expression_chain=expression_chain)
+        return expression
