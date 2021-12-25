@@ -66,7 +66,7 @@ class Dataset(torch.utils.data.Dataset):
         self.num_workers_for_labelling = num_workers_for_labelling
         self.num_data_points = len(self.lp)
         self.Y = []
-        # This is quite memory expensive.
+        # This is quite memory expensive.;perfectfmeasure binarieze
         with Pool(processes=self.num_workers_for_labelling) as pool:
             self.Y = list(
                 pool.starmap(compute_f1_target, ((self.lp.target_class_expressions, pos, neg) for (pos, neg) in

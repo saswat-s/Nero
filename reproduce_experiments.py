@@ -22,6 +22,7 @@ from owlapy.model import OWLEquivalentClassesAxiom, OWLClass, IRI, OWLObjectInte
 import itertools
 from typing import Iterable, Dict, List, Any
 import pandas
+from core.expression import *
 
 
 def load_target_class_expressions_and_instance_idx_mapping(path_of_experiment_folder):
@@ -38,11 +39,43 @@ def load_target_class_expressions_and_instance_idx_mapping(path_of_experiment_fo
             length_info = sum([2 if '¬' in _ else 1 for _ in v['name'].split()])
         else:
             length_info = v['length']
-        t = TargetClassExpression(label_id=v['label_id'],
-                                  name=v['name'],
-                                  length=length_info,
-                                  idx_individuals=eval(v['idx_individuals']),
-                                  expression_chain=eval(v['expression_chain']))
+        if v['type'] == 'atomic_expression':
+            assert v['length'] == 1
+            t = AtomicExpression(label_id=v['label_id'],
+                                 name=v['name'],
+                                 str_individuals=eval(v['str_individuals']),
+                                 idx_individuals=eval(v['idx_individuals']),
+                                 expression_chain=eval(v['expression_chain']))
+        elif v['type'] == 'intersection_expression':
+            t = IntersectionClassExpression(label_id=v['label_id'],
+                                            name=v['name'], length=length_info,
+                                            str_individuals=eval(v['str_individuals']),
+                                            idx_individuals=eval(v['idx_individuals']),
+                                            expression_chain=eval(v['expression_chain']))
+        elif v['type'] == 'union_expression':
+            t = UnionClassExpression(label_id=v['label_id'],
+                                     name=v['name'], length=length_info,
+                                     str_individuals=eval(v['str_individuals']),
+                                     idx_individuals=eval(v['idx_individuals']),
+                                     expression_chain=eval(v['expression_chain']))
+        elif v['type'] == 'existantial_quantifier_expression':
+
+            t = ExistentialQuantifierExpression(label_id=v['label_id'],
+                                                name=v['name'],
+                                                str_individuals=eval(v['str_individuals']),
+                                                idx_individuals=eval(v['idx_individuals']),
+                                                expression_chain=eval(v['expression_chain']))
+        elif v['type'] == 'universal_quantifier_expression':
+
+            t = UniversalQuantifierExpression(label_id=v['label_id'],
+                                                name=v['name'],
+                                                str_individuals=eval(v['str_individuals']),
+                                                idx_individuals=eval(v['idx_individuals']),
+                                                expression_chain=eval(v['expression_chain']))
+
+        else:
+            print(v['type'])
+            raise ValueError
         assert len(t.idx_individuals) == len(eval(v['idx_individuals']))
 
         target_class_expressions.append(t)
@@ -153,9 +186,9 @@ if __name__ == '__main__':
     parser.add_argument("--path_of_experiment_folder",
                         # default='PretrainedNero10K/NeroFamily',
                         # default='PretrainedNero/NeroFamily',
-                        default='Experiments/div_NeroFamily'
+                        default='Experiments/NeroFamily'
                         )
-    parser.add_argument("--path_knowledge_base")
+    parser.add_argument("--path_knowledge_base", default='KGs/Family/Family.owl')
     parser.add_argument("--path_of_json_learning_problems", default='LPs/Family/lp_dl_learner.json')
     # Inference Related
     parser.add_argument("--topK", type=int, default=100,
@@ -165,6 +198,6 @@ if __name__ == '__main__':
                         # default=os.getcwd() + '/dllearner-1.4.0/'
                         )
     parser.add_argument("--max_runtime_dl_learner", type=int, default=0)
-    parser.add_argument('--use_search', default='Continues', help='Continues,None,SmartInit')
+    parser.add_argument('--use_search', default='None', help='Continues,None,SmartInit')
 
     run(parser.parse_args())

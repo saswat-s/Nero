@@ -153,9 +153,9 @@ class Experiment:
         ncel_results = dict()
         # (1) Iterate over input learning problems.
         for _, (goal_exp, p, n) in enumerate(lp):
-            ncel_report=ncel.fit(str_pos=p, str_neg=n,
-                           topK=args['topK'],
-                           use_search=args['use_search'],kb_path=args['path_knowledge_base'])
+            ncel_report = ncel.fit(str_pos=p, str_neg=n,
+                                   topK=args['topK'],
+                                   use_search=args['use_search'], kb_path=args['path_knowledge_base'])
             ncel_report.update({'Target': goal_exp})
 
             ncel_results[_] = ncel_report

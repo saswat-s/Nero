@@ -52,13 +52,13 @@ if __name__ == '__main__':
                         help='[ST(Set Transformer),DeepSet]')
     parser.add_argument("--quality_function_training", type=str,
                         default='fmeasure',
-                        help='[accuracy,fmeasure]')
+                        help='[accuracy,fmeasure, perfectfmeasure]') # perfectfmeasure multi-label class.
     parser.add_argument("--loss_func", type=str,
                         default='MSELoss',
                         help='[MSELoss,HuberLoss,CrossEntropyLoss]')
 
     parser.add_argument("--number_of_target_expressions", type=int,
-                        default=5000)
+                        default=1000)
 
     parser.add_argument("--target_expression_selection", type=str,
                         default='uncorrelated_target_expression_selection',
@@ -83,7 +83,7 @@ if __name__ == '__main__':
 
     # Analysis Related
     parser.add_argument("--plot_embeddings", type=int, default=0, help='1 => Yes, 0 => No')
-    parser.add_argument('--use_search', default='None', help='Continues,None,SmartInit')
+    parser.add_argument('--use_search', default='SmartInit', help='Continues,None,SmartInit')
 
     parser.add_argument("--eval_dl_learner", type=int, default=0, help='1 => Yes, 0 => No')
     main(vars(parser.parse_args()))

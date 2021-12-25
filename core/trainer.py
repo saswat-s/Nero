@@ -134,8 +134,9 @@ class Trainer:
             start_time = time.time()
             self.logger.info('Training starts.')
 
-            self.validate(model, [self.learning_problems[i] for i in range(num_val_lp)], args={'topK': 3},
-                          info='Validation on Training Data with random weightsStarts')
+            self.validate(model, [self.learning_problems[i] for i in range(num_val_lp)],
+                          args=self.args,
+                          info='Validation on few training data points with random weights starts')
             model.train()
 
             # (5) Iterate training data
@@ -187,6 +188,7 @@ class Trainer:
 
         for _, (p, n) in enumerate(lp):
             with torch.no_grad():
+                # use_search=args['use_search'],kb_path=args['path_knowledge_base']
                 ncel_report = ncel.fit(str_pos=p, str_neg=n, topK=args['topK'])
             ncel_report.update({'P': p, 'N': n, 'F-measure': f_measure(instances=ncel_report['Instances'],
                                                                        positive_examples=set(p),
