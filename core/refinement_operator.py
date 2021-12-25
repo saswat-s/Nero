@@ -122,11 +122,13 @@ class SimpleRefinement(BaseRefinement):
             self.__store(i, length=2)
 
         self.str_nc_star=set(list(self.expression.keys()))
+
+        # If no rel available
+        self.length_to_expression_str.setdefault(3, set())
     def __store(self, target, length):
-        if len(target.str_individuals) > 0 or target.name == '⊥':
-            # Ignore all empty expression except bottom
-            self.expression[target.name] = target
-            self.length_to_expression_str.setdefault(length, set()).add(target)
+        # Ignore all empty expression except bottom
+        self.expression[target.name] = target
+        self.length_to_expression_str.setdefault(length, set()).add(target)
 
     def named_class_expressions(self):
         return [i for i in self.expression_given_length(1) if i.name not in ['⊤', '⊥']]

@@ -30,10 +30,10 @@ if __name__ == '__main__':
     parser = ArgumentParser()
     # General
     parser.add_argument("--path_knowledge_base", type=str,
-                        default='KGs/Family/Family.owl',
+                        default='KGs/Lymphography/Lymphography.owl',
                         help='The absolute path of a knowledge base required.')
     parser.add_argument("--path_lp", type=str,
-                        default='/home/demir/Desktop/Softwares/DeepTunnellingForRefinementOperators/LPs/Random_LPs/Family/LP_Random_input_size_5.json',
+                        #default='/home/demir/Desktop/Softwares/DeepTunnellingForRefinementOperators/LPs/Random_LPs/Family/LP_Random_input_size_5.json',
                         help='If None, examples are randomly generated')
     parser.add_argument("--dl_learner_binary_path", type=str, default='dllearner-1.4.0/')
     parser.add_argument('--num_workers', type=int, default=3, help='Number of cpus used during batching')
@@ -56,7 +56,7 @@ if __name__ == '__main__':
                         help='[MSELoss,HuberLoss,CrossEntropyLoss]')
 
     parser.add_argument("--number_of_target_expressions", type=int,
-                        default=3000)
+                        default=1000)
 
     parser.add_argument("--target_expression_selection", type=str,
                         default='uncorrelated_target_expression_selection',

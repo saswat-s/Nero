@@ -163,15 +163,17 @@ class NERO:
         top_prediction_queue = SearchTree()
 
         # (3) Predict scores and sort index target expressions in descending order of assigned scores.
-        sort_val, sort_idxs = torch.sort(self.forward(xpos=torch.LongTensor([idx_pos]),
-                                                      xneg=torch.LongTensor([idx_neg])), dim=1, descending=True)
+        pred_vec=self.forward(xpos=torch.LongTensor([idx_pos]),
+                                                      xneg=torch.LongTensor([idx_neg]))
+
+        sort_val, sort_idxs = torch.sort(pred_vec, dim=1, descending=True)
         sort_idxs = sort_idxs.cpu().numpy()[0]
-        sort_val = sort_val.detach().numpy()[0]
+        #sort_val = sort_val.detach().numpy()
 
         # (4) Iterate over the sorted index of target expressions.
-        for ith_rank in range(topK):
-            predicted_quality = sort_val[ith_rank]
-            idx_target = sort_idxs[ith_rank]
+        for idx_target in sort_idxs[:topK]:
+            #predicted_quality = sort_val[ith_rank]
+            #idx_target = sort_idxs[ith_rank]
             # (5) Retrieval of instance.
             str_instances = self.retrieval_of_individuals(self.target_class_expressions[idx_target])
 
