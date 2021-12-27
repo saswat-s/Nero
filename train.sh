@@ -1,13 +1,13 @@
 # Determine configurations
 number_of_target_expressions=10000
 num_embedding_dim=100
-num_epochs=2000
+num_epochs=100
 num_individual_per_example=10
-num_of_learning_problems_training=25 # |D|=|T| x num_of_learning_problems_training
-val_at_every_epochs=500
-num_workers=30
+num_of_learning_problems_training=1 # |D|=|T| x num_of_learning_problems_training
+val_at_every_epochs=1000
+num_workers=3
 learning_rate=0.01
-batch_size=1024
+batch_size=512
 
 # Select Dataset
 path_knowledge_base="$PWD/KGs/Family/Family.owl"

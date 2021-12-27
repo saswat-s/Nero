@@ -116,7 +116,7 @@ def get_all_quantifiers(kb, atomic_expressions):
     return get_all_universal_quantifiers(kb, dummy), get_all_existential_quantifiers(kb, dummy)
 
 
-def select_target_expressions(kb, args, logger) -> Tuple[List[TargetClassExpression], Dict]:
+def select_target_expressions(kb, args, logger):
     """
     Select target expressions
     :param kb:
@@ -128,6 +128,7 @@ def select_target_expressions(kb, args, logger) -> Tuple[List[TargetClassExpress
     # (1) Individual to integer mapping
     instance_idx_mapping = {individual.get_iri().as_str(): i for i, individual in enumerate(kb.individuals())}
     number_of_target_expressions = args['number_of_target_expressions']
+    rho = None
     # (2) Target Expression selection
     if args['target_expression_selection'] == 'diverse_target_expression_selection':
         target_class_expressions = diverse_target_expression_selection(kb,
@@ -141,13 +142,13 @@ def select_target_expressions(kb, args, logger) -> Tuple[List[TargetClassExpress
                                                                       instance_idx_mapping,
                                                                       logger)
     elif args['target_expression_selection'] == 'uncorrelated_target_expression_selection':
-        target_class_expressions = uncorrelated_target_expression_selection(kb,
-                                                                            number_of_target_expressions,
-                                                                            instance_idx_mapping,
-                                                                            logger)
+        target_class_expressions, rho = uncorrelated_target_expression_selection(kb,
+                                                                                 number_of_target_expressions,
+                                                                                 instance_idx_mapping,
+                                                                                 logger)
     else:
         raise KeyError(f'target_expression_selection:{args["target_expression_selection"]}')
-    return target_class_expressions, instance_idx_mapping
+    return target_class_expressions, instance_idx_mapping, rho
 
 
 def target_expressions_binary_selection_via_refining_top(rho, kb, number_of_target_expressions, num_of_all_individuals,
@@ -272,50 +273,43 @@ def intersect_and_union_expressions_from_iterable(target_class_expressions, targ
         target_class_expressions.update(res)
 
 
-def combinatorial(top_refinements, number_of_target_expressions=None):
-    targets = set()
-    targets_indv = set()
+def construct_informative_expressions(top_refinements: Set, number_of_target_expressions=None):
+    """
+    :param top_refinements:
+    :param number_of_target_expressions:
+    :return:
+    """
+    informative_targets = set()
+    target_individuals = {frozenset(i.str_individuals) for i in top_refinements}
     for i in top_refinements:
-        if len(i.str_individuals) == 0:
-            continue
-
-        if i.str_individuals in targets_indv:
-            continue
-        targets_indv.add(frozenset(i.str_individuals)), targets.add(i)
-
-        if number_of_target_expressions:
-            if len(targets) == number_of_target_expressions:
-                break
-
+        if len(informative_targets) == number_of_target_expressions:
+            break
         for j in top_refinements:
-            if len(j.str_individuals) == 0:
-                continue
             if i == j:
                 continue
-            i_and_j = i * j
-            i_or_j = i + j
-
-            if len(i_and_j.str_individuals) > 0 and (i_and_j.str_individuals not in targets_indv):
-                targets_indv.add(frozenset(i_and_j.str_individuals)), targets.add(i_and_j)
-                if len(targets) == number_of_target_expressions:
+            candidate_individuals = i.str_individuals.intersection(j.str_individuals)
+            if len(candidate_individuals) > 0 and (candidate_individuals not in target_individuals):
+                constructed = i * j
+                target_individuals.add(frozenset(constructed.str_individuals)), informative_targets.add(constructed)
+                if len(informative_targets) == number_of_target_expressions:
                     break
+            else:
+                """ Not informative Intersection """
 
-            if len(i_or_j.str_individuals) > 0 and i_or_j.str_individuals not in targets_indv:
-                targets_indv.add(frozenset(i_or_j.str_individuals)), targets.add(i_or_j)
-                if number_of_target_expressions:
-                    if len(targets) == number_of_target_expressions:
-                        break
-        if number_of_target_expressions:
-            if len(targets) == number_of_target_expressions:
-                break
-
-    assert len(targets) == len(targets_indv)
-    del targets_indv, top_refinements
-
-    return targets
+            candidate_individuals = i.str_individuals.union(j.str_individuals)
+            if len(candidate_individuals) > 0 and (candidate_individuals not in target_individuals):
+                constructed = i + j
+                target_individuals.add(frozenset(constructed.str_individuals)), informative_targets.add(constructed)
+                if len(informative_targets) == number_of_target_expressions:
+                    break
+            else:
+                """ Not informative Union """
+        if len(informative_targets) == number_of_target_expressions:
+            break
+    return informative_targets
 
 
-def reduce_redundancy(sequence_of_exp):
+def reduce_redundancy(sequence_of_exp) -> Set:
     targets = set()
     targets_indv = set()
     for i in sequence_of_exp:
@@ -328,7 +322,7 @@ def reduce_redundancy(sequence_of_exp):
 
     del targets_indv
     gc.collect()
-    return targets
+    return {i for i in sorted(targets, key=lambda x: x.length)}
 
 
 def uncorrelated_target_expression_selection(kb, number_of_target_expressions,
@@ -339,28 +333,34 @@ def uncorrelated_target_expression_selection(kb, number_of_target_expressions,
     (1.1) Consider only those expression as labels whose set of individuals has not been seen before
     (1.2.) E.g. {{....}, {.}, {...}}. Only  consider those expressions as labels that do not cover all individuals
     (2)
-    :param kb:
-    :param tolerance_for_search_unique_target_exp:
-    :param number_of_target_expressions:
-    :param instance_idx_mapping:
-    :param logger:
-    :return:
     """
     rho = SimpleRefinement(knowledge_base=kb)
     num_of_all_individuals = kb.individuals_count()
     assert len(instance_idx_mapping) == num_of_all_individuals
-
-    nc = rho.named_class_expressions()
+    nc = rho.atomic_class_expressions()
     neg_nc = rho.negated_named_class_expressions()
     q = rho.all_quantifiers()
     uncorrelated_refinements = reduce_redundancy(nc + neg_nc + q)
+    logger.info(
+        f'{len(uncorrelated_refinements)} number of target expressions are obtained from the atomic expressions ,negations and quantifiers')
+
     del nc, neg_nc, q
     gc.collect()
+    if len(uncorrelated_refinements) < number_of_target_expressions:
+        n = number_of_target_expressions - len(uncorrelated_refinements)
+        while n != 0:
+            result = construct_informative_expressions(uncorrelated_refinements, n)
+            uncorrelated_refinements.update(result)
+            n = number_of_target_expressions - len(uncorrelated_refinements)
+    else:
+        """ do nothing """
+    logger.info(
+        f'{len(uncorrelated_refinements)} number of target expressions are obtained from intersecting and union of the atomic expressions ,negations and quantifiers')
 
-    while len(uncorrelated_refinements) != number_of_target_expressions:
-        uncorrelated_refinements = combinatorial(uncorrelated_refinements, number_of_target_expressions)
+    assert uncorrelated_refinements == reduce_redundancy(uncorrelated_refinements)
+    uncorrelated_refinements = sorted(uncorrelated_refinements, key=lambda x: x.length)
     result = []
-    for ith, ce in enumerate(sorted(uncorrelated_refinements, key=lambda x: x.length)):
+    for ith, ce in enumerate(uncorrelated_refinements):
         ce.label_id = ith
         ce.idx_individuals = set(instance_idx_mapping[i] for i in ce.str_individuals)
         result.append(ce)
@@ -369,7 +369,7 @@ def uncorrelated_target_expression_selection(kb, number_of_target_expressions,
         f'{len(result)} number of target expressions are obtained.')
 
     assert len(result) == number_of_target_expressions
-    return result
+    return result, rho
 
 
 def diverse_target_expression_selection(kb, tolerance_for_search_unique_target_exp, number_of_target_expressions,
@@ -495,13 +495,17 @@ def generate_learning_problems_from_targets(target_class_expressions: List[Targe
     pos_examples = []
     neg_examples = []
     num_individual_per_example = args['num_individual_per_example']
+    n = 0
     for i in range(args['num_of_learning_problems_training']):
         for tce in target_class_expressions:
             try:
                 pos_examples.append(random.choices(list(tce.idx_individuals), k=num_individual_per_example))
                 neg_examples.append(random.choices(instances_idx_list, k=num_individual_per_example))
             except:
+                # Ignore this exp
+                n += 1
                 continue
+
     assert len(pos_examples) == len(neg_examples)
     return pos_examples, neg_examples
 

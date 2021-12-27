@@ -49,8 +49,8 @@ class Trainer:
                f'|I|={self.args["num_instances"]},' \
                f'|D|={len(self.learning_problems)},' \
                f'|T|={len(self.learning_problems.target_class_expressions)},' \
-               f'd:{self.args["num_embedding_dim"]},'\
-               f'Quality func for training:{self.args["quality_function_training"]},'\
+               f'd:{self.args["num_embedding_dim"]},' \
+               f'Quality func for training:{self.args["quality_function_training"]},' \
                f'NumEpoch={self.args["num_epochs"]},' \
                f'LR={self.args["learning_rate"]},' \
                f'BatchSize={self.args["batch_size"]},' \
@@ -92,9 +92,9 @@ class Trainer:
         # (1) Initialize the model.
         model = self.neural_architecture_selection()
         # (3) Initialize the training. MSE seemed to yield better results, less num of concepts explored
-        if self.args['loss_func']=='MSELoss':
+        if self.args['loss_func'] == 'MSELoss':
             loss_func = torch.nn.MSELoss()
-        elif self.args['loss_func']=='CrossEntropyLoss':
+        elif self.args['loss_func'] == 'CrossEntropyLoss':
             loss_func = torch.nn.CrossEntropyLoss()
         elif self.args['loss_func'] == 'HuberLoss':
             loss_func = torch.nn.HuberLoss()
@@ -103,13 +103,6 @@ class Trainer:
 
         optimizer = torch.optim.Adam(model.parameters(), lr=self.args['learning_rate'])
 
-        """
-        # DatasetWithOnFlyLabelling uses less memory but takes too much time although all cpus are used
-        data_loader = torch.utils.data.DataLoader(DatasetWithOnFlyLabelling(self.learning_problems),
-                                                  batch_size=self.args['batch_size'],
-                                                  num_workers=self.args['num_workers'], shuffle=True)
-        
-        """
         # (1) Set model in training mode.
         model.train()
         # (2) Send model to selected device.
@@ -132,11 +125,6 @@ class Trainer:
             # Validation on randomly sampled 1 percent of the data
             num_val_lp = 1 + len(self.learning_problems) // 100
             start_time = time.time()
-            self.logger.info('Training starts.')
-
-            #self.validate(model, [self.learning_problems[i] for i in range(num_val_lp)],
-            #              args=self.args,
-            #              info='Validation on few training data points with random weights starts')
             model.train()
 
             # (5) Iterate training data
@@ -164,9 +152,9 @@ class Trainer:
                     self.logger.info(f'{it}.th epoch loss: {epoch_loss}')
                 if it % self.args['val_at_every_epochs'] == 0:
                     # At each time sample 10% of the training data.
-                    #self.validate(model, lp=random.choices(self.learning_problems, k=num_val_lp), args={'topK': 100},
-                    #              info='Validation on Training Data Starts')
-                    self.validate(model, [self.learning_problems[i] for i in range(num_val_lp)], args={'topK': 3},info='Validation on Training Data Starts')
+                    # or lp=random.choices(self.learning_problems, k=num_val_lp)
+                    self.validate(model, [self.learning_problems[i] for i in range(num_val_lp)], args={'topK': 3},
+                                  info='Validation on Training Data Starts')
                     model.train()
 
             training_time = time.time() - start_time

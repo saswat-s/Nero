@@ -36,7 +36,7 @@ class Experiment:
         # (2) Initialize KB.
         kb = self.initialize_knowledge_base()
         # (3) Initialize Training Data (D: {(E^+,E^-)})_i ^N .
-        self.lp = self.construct_targets_and_problems(kb)
+        self.lp, self.rho = self.construct_targets_and_problems(kb)
         # (4) Init Trainer.
         self.trainer = Trainer(learning_problems=self.lp, args=self.args, logger=self.logger)
 
@@ -73,7 +73,9 @@ class Experiment:
     def construct_targets_and_problems(self, kb: KnowledgeBase) -> LP:
         """ Construct target class expressions, i.e., chose good labels. """
         # (1) Select target expressions according to input strategy
-        target_class_expressions, instance_idx_mapping = select_target_expressions(kb, self.args, logger=self.logger)
+        rho = None
+        target_class_expressions, instance_idx_mapping, rho = select_target_expressions(kb, self.args,
+                                                                                        logger=self.logger)
         # e_pos, e_neg = generate_random_learning_problems(instance_idx_mapping, self.args)
         # (2) Generate training data points via sampling from targets.
         e_pos, e_neg = generate_learning_problems_from_targets(target_class_expressions, instance_idx_mapping,
@@ -82,7 +84,7 @@ class Experiment:
         lp = LP(e_pos=e_pos, e_neg=e_neg, instance_idx_mapping=instance_idx_mapping,
                 target_class_expressions=target_class_expressions)
         self.logger.info(lp)
-        return lp
+        return lp, rho
 
     def describe_and_store(self) -> None:
         """
@@ -93,6 +95,7 @@ class Experiment:
         self.logger.info('Experimental Setting is being serialized.')
         if torch.cuda.is_available():
             self.logger.info('Name of selected Device:{0}'.format(torch.cuda.get_device_name(self.trainer.device)))
+
         # (1) Store Learning Problems; We do not need to store them
         # self.logger.info('Serialize Learning Problems.')
         # save_as_json(storage_path=self.storage_path,
@@ -148,7 +151,7 @@ class Experiment:
         self.logger.info(f'Total Runtime of the experiment:{time.time() - start_time}')
 
     def evaluate(self, ncel, lp, args) -> None:
-        self.logger.info(f'Evaluation Starts {len(lp)}')
+        self.logger.info(f'Evaluation Starts on {len(lp)} number of learning problems')
 
         ncel_results = dict()
         # (1) Iterate over input learning problems.

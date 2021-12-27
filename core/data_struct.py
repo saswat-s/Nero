@@ -50,18 +50,20 @@ class ExpressionQueue:
 
 
 class SearchTree:
-    def __init__(self,maxsize=0):
+    def __init__(self, maxsize=0):
         self.items_in_queue = PriorityQueue(maxsize)
         self.gate = dict()
 
-    def put(self, expression,key=None):
-        if expression.quality > 0:
+    def put(self, expression, key=None, condition=None):
+        if condition is None:
             if expression.name not in self.gate:
                 if key is None:
-                    key=-expression.quality
+                    key = -expression.quality
                 # The lowest valued entries are retrieved first
                 self.items_in_queue.put((key, expression))
-                self.gate[expression.name]=expression
+                self.gate[expression.name] = expression
+        else:
+            raise ValueError('Define the condition')
 
     def get(self):
         _, expression = self.items_in_queue.get(timeout=1)

@@ -30,7 +30,7 @@ class TargetClassExpression:
         return self.quality < other.quality
 
     def __str__(self):
-        return f'{self.name} | Indv:{self.num_individuals} | Quality:{self.quality}'  # | expression_chain:{self.expression_chain}'
+        return f'TargetClassExpression at {hex(id(self))} | {self.name} | Indv:{self.num_individuals} | Quality:{self.quality}'  # | expression_chain:{self.expression_chain}'
 
     def __repr__(self):
         return self.__str__()
@@ -62,7 +62,7 @@ class ClassExpression(ABC):
         assert isinstance(str_individuals, set)
         try:
             assert isinstance(expression_chain, list) or isinstance(expression_chain, tuple)
-        except:
+        except AssertionError:
             print(expression_chain)
             print(type(expression_chain))
             raise ValueError
@@ -79,7 +79,7 @@ class ClassExpression(ABC):
             self.length = length
 
     def __str__(self):
-        return f'ClassExpression at {hex(id(self))} | {self.name} | Indv:{self.num_individuals} | Quality:{self.quality}'  # | expression_chain:{self.expression_chain}'
+        return f'{self.type} at {hex(id(self))} | {self.name} | Indv:{self.num_individuals} | Quality:{self.quality:.3f}'  # | expression_chain:{self.expression_chain}'
 
     def __repr__(self):
         return self.__str__()
@@ -145,14 +145,13 @@ class UnionClassExpression(ClassExpression):
         self.idx_individuals = idx_individuals
         self.concepts = concepts
 
-
     def __str__(self):
         return f'UnionClassExpression at {hex(id(self))} | {self.name} | Indv:{self.num_individuals} | Quality:{self.quality:.3f}'  # | expression_chain:{self.expression_chain}'
 
 
 class IntersectionClassExpression(ClassExpression):
     def __init__(self, *, name: str, length: int, str_individuals: Set, expression_chain: List, owl_class=None,
-                 quality=None, label_id=None, concepts=None,idx_individuals=None):
+                 quality=None, label_id=None, concepts=None, idx_individuals=None):
         super().__init__(name=name, str_individuals=str_individuals, expression_chain=expression_chain, quality=quality,
                          owl_class=owl_class)
 
@@ -178,8 +177,8 @@ class AtomicExpression(ClassExpression):
         self.label_id = label_id
         self.idx_individuals = idx_individuals
 
-    def __str__(self):
-        return f'AtomicExpression at {hex(id(self))} | {self.name} | Indv:{self.num_individuals} | Quality:{self.quality:.3f}'  # | expression_chain:{self.expression_chain}'
+    #def __str__(self):
+    #    return f'AtomicExpression at {hex(id(self))} | {self.name} | Indv:{self.num_individuals} | Quality:{self.quality:.3f}'  # | expression_chain:{self.expression_chain}'
 
 
 class ComplementOfAtomicExpression(ClassExpression):

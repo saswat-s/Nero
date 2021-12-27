@@ -15,6 +15,7 @@ class NERO:
                  quality_func,
                  target_class_expressions,
                  instance_idx_mapping: Dict):
+        assert len(target_class_expressions) > 2
         self.model = model
         self.quality_func = quality_func
         self.instance_idx_mapping = instance_idx_mapping
@@ -140,15 +141,12 @@ class NERO:
 
     def fit(self, str_pos: [str], str_neg: [str], topK: int = None, use_search=None, kb_path=None) -> Dict:
         """
-
-        :param kb_path:
-        :param use_search:
-        :param kb:
-        :param str_pos: string rep of E^+
-        :param str_neg: string rep of E^+
-        :param topK: number of top ranked expressions to be tested
-        :param local_search: Return a queue of top ranked expressions sorted as descending order of qualities
-        :return:
+        Given set of positive and negative indviduals, fit returns
+        {'Prediction': best_pred.name,
+        'Instances': ...,
+        'F-measure': ...,
+        'NumClassTested': ...,
+        'Runtime': ...}
         """
         # (1) Initialize Learning Problem.
         start_time = time.time()
@@ -163,32 +161,30 @@ class NERO:
         top_prediction_queue = SearchTree()
 
         # (3) Predict scores and sort index target expressions in descending order of assigned scores.
-        pred_vec=self.forward(xpos=torch.LongTensor([idx_pos]),
-                                                      xneg=torch.LongTensor([idx_neg]))
+        pred_vec = self.forward(xpos=torch.LongTensor([idx_pos]),
+                                xneg=torch.LongTensor([idx_neg]))
 
         sort_val, sort_idxs = torch.sort(pred_vec, dim=1, descending=True)
         sort_idxs = sort_idxs.cpu().numpy()[0]
-        #sort_val = sort_val.detach().numpy()
 
         # (4) Iterate over the sorted index of target expressions.
         for idx_target in sort_idxs[:topK]:
-            #predicted_quality = sort_val[ith_rank]
-            #idx_target = sort_idxs[ith_rank]
             # (5) Retrieval of instance.
-            str_instances = self.retrieval_of_individuals(self.target_class_expressions[idx_target])
+            str_individuals = self.retrieval_of_individuals(self.target_class_expressions[idx_target])
 
             # (6) Compute Quality.
-            quality_score = self.call_quality_function(set_str_individual=str_instances,
+            quality_score = self.call_quality_function(set_str_individual=str_individuals,
                                                        set_str_pos=set_pos,
                                                        set_str_neg=set_neg)
-            # print(f'Pred. Quality {predicted_quality}, True:{quality_score}')
             self.target_class_expressions[idx_target].quality = quality_score
+            self.target_class_expressions[idx_target].str_individuals = str_individuals
             # (7) Put CE into the priority queue.
             top_prediction_queue.put(self.target_class_expressions[idx_target], key=-quality_score)
             # (8) If goal is found, we do not need to compute scores.
             if quality_score == 1.0:
                 goal_found = True
                 break
+        assert len(top_prediction_queue) > 0
         # (9) IF goal is not found, we do search
         if goal_found is False:
             if use_search == 'Continues':
@@ -206,6 +202,7 @@ class NERO:
                 if best_constructed_expression > best_pred:
                     best_pred = best_constructed_expression
             elif use_search == 'None' or use_search is None:
+                assert len(top_prediction_queue) > 0
                 best_pred = top_prediction_queue.get()
             else:
                 print(use_search)
@@ -242,8 +239,8 @@ class NERO:
         while len(top_prediction_queue) > 0:
             # (2.1) Get top ranked Description Logic Expressions: C
             nero_mode_class_expression = top_prediction_queue.get()
-            if nero_mode_class_expression.type in ['union_expression','intersection_expression']:
-                nero_mode_class_expression.concepts=rho.construct_two_exp_from_chain(nero_mode_class_expression)
+            if nero_mode_class_expression.type in ['union_expression', 'intersection_expression']:
+                nero_mode_class_expression.concepts = rho.construct_two_exp_from_chain(nero_mode_class_expression)
 
             # (2.2) Compute heuristic val: C
             heuristic_st.put(nero_mode_class_expression,
@@ -429,11 +426,11 @@ class NERO:
     def embeddings_to_numpy(self):
         return self.model.embeddings.weight.data.detach().numpy()
 
-    def get_target_class_expressions(self):
-        return (self.renderer.render(cl.concept) for cl in self.target_class_expressions)
+    # def get_target_class_expressions(self):
+    #    return (self.renderer.render(cl.concept) for cl in self.target_class_expressions)
 
-    def generate_expression(self, *, i, kb, expression_chain):
-        expression = ClassExpression(name=self.renderer.render(i),
-                                     str_individuals=set([_.get_iri().as_str() for _ in kb.individuals(i)]),
-                                     expression_chain=expression_chain)
-        return expression
+    # def generate_expression(self, *, i, kb, expression_chain):
+    #    expression = ClassExpression(name=self.renderer.render(i),
+    #                                 str_individuals=set([_.get_iri().as_str() for _ in kb.individuals(i)]),
+    #                                 expression_chain=expression_chain)
+    #    return expression
