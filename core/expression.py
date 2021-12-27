@@ -2,23 +2,20 @@ from typing import Set, List
 
 
 class TargetClassExpression:
-    def __init__(self, *, label_id, name: str, idx_individuals: Set, expression_chain: List, length: int = None,
-                 # str_individuals: Set = None
+    def __init__(self, *, label_id, name: str, idx_individuals: Set = None, expression_chain: List = None,
+                 length: int = None, str_individuals: Set = None
                  ):
-        assert isinstance(name, str)
-        assert isinstance(expression_chain, list) or isinstance(expression_chain, tuple)
 
         self.label_id = label_id
         self.name = name
         self.idx_individuals = idx_individuals
-        # self.str_individuals = str_individuals
-        # if self.str_individuals is None:
-        #    self.str_individuals = set()
-        # else:
-        #    assert len(self.str_individuals) == len(self.idx_individuals)
+        self.str_individuals = str_individuals
 
         self.expression_chain = expression_chain
-        self.num_individuals = len(self.idx_individuals)
+        if self.idx_individuals is not None:
+            self.num_individuals = len(self.idx_individuals)
+        else:
+            self.num_individuals = None
         self.length = length
         self.quality = None
 
@@ -177,7 +174,7 @@ class AtomicExpression(ClassExpression):
         self.label_id = label_id
         self.idx_individuals = idx_individuals
 
-    #def __str__(self):
+    # def __str__(self):
     #    return f'AtomicExpression at {hex(id(self))} | {self.name} | Indv:{self.num_individuals} | Quality:{self.quality:.3f}'  # | expression_chain:{self.expression_chain}'
 
 

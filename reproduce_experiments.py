@@ -32,7 +32,7 @@ def load_target_class_expressions_and_instance_idx_mapping(args):
     :return:
     """
 
-    # target_class_expressions Must be empty and must be filled in an exactorder
+    # (1) Extract Class Expressions
     target_class_expressions = []
     df = pd.read_csv(args.path_of_experiment_folder + '/target_class_expressions.csv', index_col=0)
     if args.use_search is not None and args.path_of_experiment_folder is not None:
@@ -83,24 +83,13 @@ def load_target_class_expressions_and_instance_idx_mapping(args):
             assert len(t.idx_individuals) == len(eval(v['idx_individuals']))
             target_class_expressions.append(t)
     else:
-        # We do not need to materialize input KB as we do only single prediciton
         for index, v in df.iterrows():
-            if 'length' not in v:
-                length_info = sum([2 if '¬' in _ else 1 for _ in v['name'].split()])
-            else:
-                length_info = v['length']
-
-            t=TargetClassExpression(label_id=v['label_id'],
-                                                name=v['name'], length=length_info,
-                                                idx_individuals=eval(v['idx_individuals']),
-                                                expression_chain=eval(v['expression_chain']))
-            assert len(t.idx_individuals) == len(eval(v['idx_individuals']))
-            target_class_expressions.append(t)
+            target_class_expressions.append(TargetClassExpression(label_id=v['label_id'],name=v['name']))
 
     instance_idx_mapping = dict()
     with open(args.path_of_experiment_folder + '/instance_idx_mapping.json', 'r') as f:
         instance_idx_mapping.update(json.load(f))
-    return target_class_expressions, instance_idx_mapping
+    return target_class_expressions, instance_idx_mapping, df
 
 
 def load_pytorch_module(args: Dict, path_of_experiment_folder) -> torch.nn.Module:
@@ -126,21 +115,15 @@ def load_ncel(args) -> NERO:
     with open(args.path_of_experiment_folder + '/settings.json', 'r') as f:
         settings.update(json.load(f))
     # (2) Load target class expressions & instance_idx_mapping
-    target_class_expressions, instance_idx_mapping = load_target_class_expressions_and_instance_idx_mapping(args)
-
-    """
-    for i in target_class_expressions:
-        print(i)
-        print('###')
-        for x in rho.refine(i):
-            print(x)
-    """
+    target_class_expressions, instance_idx_mapping, df = load_target_class_expressions_and_instance_idx_mapping(args)
 
     # (3) Load Pytorch Module
     model = NERO(model=load_pytorch_module(settings, args.path_of_experiment_folder),
                  quality_func=f_measure,
                  target_class_expressions=target_class_expressions,
-                 instance_idx_mapping=instance_idx_mapping)
+                 instance_idx_mapping=instance_idx_mapping,
+                 target_retrieval_data_frame=df
+                 )
     model.eval()
     return model
 
@@ -207,18 +190,14 @@ if __name__ == '__main__':
 
     # Path of an experiment folder
     parser.add_argument("--path_of_experiment_folder",
-                        # default='PretrainedNero10K/NeroFamily',
-                        default='Experiments/NeroMutagenesis',
-                        #default='Experiments/NeroCarcinogenesis'
+                        default='Experiments/NeroFamily',
                         )
     parser.add_argument("--path_knowledge_base",
-                        #default='KGs/Carcinogenesis/Carcinogenesis.owl',
-                        default = 'KGs/Family/Family.owl'
+                        default='KGs/Family/Family.owl'
                         )
     parser.add_argument("--path_of_json_learning_problems",
-                        #default='LPs/Carcinogenesis/lp_dl_learner.json'
-                        #default = 'LPs/Family/lp_dl_learner.json'
-    )
+                        default='LPs/Family/lp_dl_learner.json'
+                        )
     # Inference Related
     parser.add_argument("--topK", type=int, default=100,
                         help='Test the highest topK target expressions')
@@ -226,7 +205,7 @@ if __name__ == '__main__':
                         default=None
                         # default=os.getcwd() + '/dllearner-1.4.0/'
                         )
-    parser.add_argument("--max_runtime_dl_learner", type=int, default=0)
+    parser.add_argument("--max_runtime_dl_learner", type=int, default=3)
     parser.add_argument('--use_search', default=None, help='Continues,SmartInit')
 
     run(parser.parse_args())

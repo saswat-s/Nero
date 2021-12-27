@@ -14,7 +14,7 @@ class NERO:
     def __init__(self, model: torch.nn.Module,
                  quality_func,
                  target_class_expressions,
-                 instance_idx_mapping: Dict):
+                 instance_idx_mapping: Dict, target_retrieval_data_frame=None):
         assert len(target_class_expressions) > 2
         self.model = model
         self.quality_func = quality_func
@@ -32,6 +32,7 @@ class NERO:
         self.set_str_all_instances = set(list(self.instance_idx_mapping.keys()))
 
         self.retrieve_counter = 0
+        self.target_retrieval_data_frame = target_retrieval_data_frame
 
     def get_target_exp_found_in_chain(self, expression_chain):
         for i in expression_chain:
@@ -104,40 +105,13 @@ class NERO:
             exit(1)
 
     def retrieval_of_individuals(self, target_class_expression):
-        return {self.inverse_instance_idx_mapping[_] for _ in target_class_expression.idx_individuals}
-
-    """
-    def predict(self, str_pos: [str], str_neg: [str], topK: int = None, local_search=True) -> ExpressionQueue:
-        start_time = time.time()
-        self.predict_sanity_checking(pos=str_pos, neg=str_neg, topK=topK)
-        set_pos, set_neg = set(str_pos), set(str_neg)
-        idx_pos = self.str_to_index_mapping(str_pos)
-        idx_neg = self.str_to_index_mapping(str_neg)
-        goal_found = False
-
-        # (2) Initialize a priority queue for top K Target Expressions.
-        results = ExpressionQueue()
-        # (3) Predict scores and sort index target expressions in descending order of assigned scores.
-        _, sort_idxs = torch.sort(self.forward(xpos=torch.LongTensor([idx_pos]),
-                                               xneg=torch.LongTensor([idx_neg])), dim=1, descending=True)
-        sort_idxs = sort_idxs.cpu().numpy()[0]
-        # (4) Iterate over the sorted index of target expressions.
-        for the_exploration, idx_target in enumerate(sort_idxs[:topK]):
-            # (4.1.) Retrieval of instance.
-            str_instances = self.retrieval_of_individuals(self.target_class_expressions[idx_target])
-
-            quality_score = self.call_quality_function(set_str_individual=str_instances,
-                                                       set_str_pos=set_pos,
-                                                       set_str_neg=set_neg)
-            results.put(quality_score, self.target_class_expressions[idx_target], str_instances)
-            if quality_score == 1.0:
-                goal_found = True
-                break
-
-        # If Goal is not found in top K predictions
-        # Later call CELOE if goal not found
-        return results, len(results), time.time() - start_time
-    """
+        if target_class_expression.idx_individuals is None:
+            str_row = \
+            self.target_retrieval_data_frame[self.target_retrieval_data_frame['name'] == target_class_expression.name][
+                'str_individuals'].values[0]
+            return eval(str_row)
+        else:
+            return {self.inverse_instance_idx_mapping[_] for _ in target_class_expression.idx_individuals}
 
     def fit(self, str_pos: [str], str_neg: [str], topK: int = None, use_search=None, kb_path=None) -> Dict:
         """
@@ -161,16 +135,17 @@ class NERO:
         top_prediction_queue = SearchTree()
 
         # (3) Predict scores and sort index target expressions in descending order of assigned scores.
-        pred_vec = self.forward(xpos=torch.LongTensor([idx_pos]),
-                                xneg=torch.LongTensor([idx_neg]))
-
-        sort_val, sort_idxs = torch.sort(pred_vec, dim=1, descending=True)
+        sort_val, sort_idxs = torch.sort(self.forward(xpos=torch.LongTensor([idx_pos]),
+                                                      xneg=torch.LongTensor([idx_neg])), dim=1, descending=True)
         sort_idxs = sort_idxs.cpu().numpy()[0]
+        del sort_val
 
         # (4) Iterate over the sorted index of target expressions.
         for idx_target in sort_idxs[:topK]:
+            # (5) Look up target class expression
+            target_ce = self.target_class_expressions[idx_target]
             # (5) Retrieval of instance.
-            str_individuals = self.retrieval_of_individuals(self.target_class_expressions[idx_target])
+            str_individuals = self.retrieval_of_individuals(target_ce)
 
             # (6) Compute Quality.
             quality_score = self.call_quality_function(set_str_individual=str_individuals,
@@ -425,12 +400,3 @@ class NERO:
 
     def embeddings_to_numpy(self):
         return self.model.embeddings.weight.data.detach().numpy()
-
-    # def get_target_class_expressions(self):
-    #    return (self.renderer.render(cl.concept) for cl in self.target_class_expressions)
-
-    # def generate_expression(self, *, i, kb, expression_chain):
-    #    expression = ClassExpression(name=self.renderer.render(i),
-    #                                 str_individuals=set([_.get_iri().as_str() for _ in kb.individuals(i)]),
-    #                                 expression_chain=expression_chain)
-    #    return expression
