@@ -342,8 +342,7 @@ def uncorrelated_target_expression_selection(kb, number_of_target_expressions,
     q = rho.all_quantifiers()
     uncorrelated_refinements = reduce_redundancy(nc + neg_nc + q)
     logger.info(
-        f'{len(uncorrelated_refinements)} number of target expressions are obtained from the atomic expressions ,negations and quantifiers')
-
+        f'{len(uncorrelated_refinements)} number of target expressions are obtained from the atomic expressions, negations and quantifiers')
     del nc, neg_nc, q
     gc.collect()
     if len(uncorrelated_refinements) < number_of_target_expressions:
@@ -367,8 +366,7 @@ def uncorrelated_target_expression_selection(kb, number_of_target_expressions,
     gc.collect()
     logger.info(
         f'{len(result)} number of target expressions are obtained.')
-
-    assert len(result) == number_of_target_expressions
+    assert len(result) >= number_of_target_expressions
     return result, rho
 
 
@@ -426,7 +424,6 @@ def random_target_expression_selection(kb, number_of_target_expressions, instanc
     Select Target Expression
     :return:
     """
-    # @TODO followed same method of not using RL_State as done in entropy_based_target_expression_selection
     # (1) Preparation
     renderer = DLSyntaxObjectRenderer()
     target_class_expressions = set()
