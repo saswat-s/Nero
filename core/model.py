@@ -3,9 +3,9 @@ from torch import nn
 from typing import Dict, List, Iterable, Set
 from .expression import ClassExpression, TargetClassExpression
 from owlapy.render import DLSyntaxObjectRenderer
-from .static_funcs import apply_rho_on_rl_state, ClosedWorld_ReasonerFactory
+from .static_funcs import ClosedWorld_ReasonerFactory
 import time
-from .data_struct import ExpressionQueue, State, SearchTree
+from .data_struct import SearchTree
 from ontolearn import KnowledgeBase
 from .refinement_operator import SimpleRefinement
 
@@ -19,17 +19,19 @@ class NERO:
         self.model = model
         self.quality_func = quality_func
         self.instance_idx_mapping = instance_idx_mapping
+
         self.inverse_instance_idx_mapping = dict(
             zip(self.instance_idx_mapping.values(), self.instance_idx_mapping.keys()))
+
         # expression ordered by id.
         self.target_class_expressions = target_class_expressions
-
-        self.str_target_class_expression_to_label_id = {i.name: i.label_id for i in self.target_class_expressions}
-
-        self.renderer = DLSyntaxObjectRenderer()
         self.max_top_k = len(self.target_class_expressions)
 
-        self.set_str_all_instances = set(list(self.instance_idx_mapping.keys()))
+        # self.str_target_class_expression_to_label_id = {i.name: i.label_id for i in self.target_class_expressions}
+
+        # self.renderer = DLSyntaxObjectRenderer()
+
+        # self.set_str_all_instances = set(list(self.instance_idx_mapping.keys()))
 
         self.retrieve_counter = 0
         self.target_retrieval_data_frame = target_retrieval_data_frame
@@ -105,13 +107,27 @@ class NERO:
             exit(1)
 
     def retrieval_of_individuals(self, target_class_expression):
-        if target_class_expression.idx_individuals is None:
+        if target_class_expression.str_individuals:
+            return target_class_expression.str_individuals
+        elif target_class_expression.idx_individuals is None:
             str_row = \
-            self.target_retrieval_data_frame[self.target_retrieval_data_frame['name'] == target_class_expression.name][
-                'str_individuals'].values[0]
+                self.target_retrieval_data_frame[
+                    self.target_retrieval_data_frame['name'] == target_class_expression.name][
+                    'str_individuals'].values[0]
             return eval(str_row)
         else:
             return {self.inverse_instance_idx_mapping[_] for _ in target_class_expression.idx_individuals}
+
+    def select_target_expression(self, idx: int):
+        # (5) Look up target class expression
+        if isinstance(self.target_class_expressions, list):
+            return self.target_class_expressions[idx_target]
+
+        row = self.target_class_expressions[self.target_class_expressions['label_id'] == idx]
+        return TargetClassExpression(label_id=row['label_id'].item(),
+                                     name=row['name'].item(),
+                                     str_individuals=eval(row['str_individuals'].item()),
+                                     idx_individuals=eval(row['idx_individuals'].item()))
 
     def fit(self, str_pos: [str], str_neg: [str], topK: int = None, use_search=None, kb_path=None) -> Dict:
         """
@@ -123,8 +139,8 @@ class NERO:
         'Runtime': ...}
         """
         # (1) Initialize Learning Problem.
-        start_time = time.time()
         self.predict_sanity_checking(pos=str_pos, neg=str_neg, topK=topK)
+        start_time = time.time()
         self.retrieve_counter = 0
         set_pos, set_neg = set(str_pos), set(str_neg)
         idx_pos = self.str_to_index_mapping(str_pos)
@@ -133,17 +149,13 @@ class NERO:
 
         # (2) Initialize a priority queue for top K Target Expressions.
         top_prediction_queue = SearchTree()
-
         # (3) Predict scores and sort index target expressions in descending order of assigned scores.
         sort_val, sort_idxs = torch.sort(self.forward(xpos=torch.LongTensor([idx_pos]),
                                                       xneg=torch.LongTensor([idx_neg])), dim=1, descending=True)
         sort_idxs = sort_idxs.cpu().numpy()[0]
-        del sort_val
-
         # (4) Iterate over the sorted index of target expressions.
         for idx_target in sort_idxs[:topK]:
-            # (5) Look up target class expression
-            target_ce = self.target_class_expressions[idx_target]
+            target_ce = self.select_target_expression(idx_target)
             # (5) Retrieval of instance.
             str_individuals = self.retrieval_of_individuals(target_ce)
 
@@ -151,10 +163,14 @@ class NERO:
             quality_score = self.call_quality_function(set_str_individual=str_individuals,
                                                        set_str_pos=set_pos,
                                                        set_str_neg=set_neg)
-            self.target_class_expressions[idx_target].quality = quality_score
-            self.target_class_expressions[idx_target].str_individuals = str_individuals
+            target_ce.quality = quality_score
+            target_ce.str_individuals = str_individuals
+
+            #self.target_class_expressions[idx_target].quality = quality_score
+            #self.target_class_expressions[idx_target].str_individuals = str_individuals
+            top_prediction_queue.put(target_ce, key=-quality_score)
             # (7) Put CE into the priority queue.
-            top_prediction_queue.put(self.target_class_expressions[idx_target], key=-quality_score)
+            #top_prediction_queue.put(self.target_class_expressions[idx_target], key=-quality_score)
             # (8) If goal is found, we do not need to compute scores.
             if quality_score == 1.0:
                 goal_found = True

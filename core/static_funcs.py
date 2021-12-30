@@ -14,10 +14,14 @@ from owlapy.render import DLSyntaxObjectRenderer
 from owlapy.model import OWLObjectSomeValuesFrom, OWLObjectAllValuesFrom
 import random
 from random import randint
-
+import resource
 from sys import getsizeof, stderr
 from itertools import chain
-from collections import deque
+from sklearn.decomposition import PCA
+import seaborn as sns
+import matplotlib.pyplot as plt
+sns.set_style("whitegrid")
+
 
 try:
     from reprlib import repr
@@ -34,18 +38,15 @@ from .expression import TargetClassExpression, ClassExpression, UniversalQuantif
     ExistentialQuantifierExpression, Role
 from .refinement_operator import SimpleRefinement
 
-
+"""
 def get_all_atomic_class_expressions(kb):
-    """
-    :param kb:
-    :return:
-    """
     renderer = DLSyntaxObjectRenderer()
     for owl_class in kb.get_all_sub_concepts(kb.thing):
         yield ClassExpression(name=renderer.render(owl_class),
                               str_individuals=set(_.get_iri().as_str() for _ in kb.individuals(owl_class)),
                               owl_class=owl_class,
                               expression_chain=['Thing'])
+"""
 
 
 def single_universal_quantifier(*, kb, filler, atomic_look_up, role_look_up):
@@ -584,8 +585,6 @@ def total_size(o, handlers={}, verbose=False):
     return sizeof(o)
 
 
-import resource
-
 
 def using(point=""):
     usage = resource.getrusage(resource.RUSAGE_SELF)
@@ -731,3 +730,24 @@ def create_logger(*, name, p):
 def save_weights(model, storage_path):
     model.to('cpu')
     torch.save(model.state_dict(), storage_path + f'/final_model.pt')
+
+
+def selective_2Dplot(pre_trained_nero, concepts, f=sns.scatterplot,path_save_fig='2dplot.png'):
+    for c in concepts:
+        c.embeddings = pre_trained_nero.positive_expression_embeddings(
+            c.str_individuals).cpu().detach().numpy().flatten()
+
+    low_emb = PCA(n_components=2).fit_transform([c.embeddings for c in concepts])
+    f(x=low_emb[:, 0], y=low_emb[:, 1])  # sns.scatterplot or     sns.regplot(x=low_emb[:, 0], y=low_emb[:, 1])
+
+    for (c, emb) in zip(concepts, low_emb):
+        plt.annotate(c.name, (emb[0], emb[1]), annotation_clip=False)
+
+    plt.xlabel('First Component')
+    plt.ylabel('Second Component')
+    plt.ylim(-200, 300)
+    plt.xlim(-200, 800)
+    plt.savefig(path_save_fig)
+    plt.plot()
+    plt.show()
+

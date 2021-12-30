@@ -15,7 +15,7 @@ class State:
     def __str__(self):
         return f'{self.tce} | Quality:{self.quality:.3f}'
 
-
+"""
 class ExpressionQueue:
     def __init__(self):
         self.items_in_queue = PriorityQueue()
@@ -47,7 +47,7 @@ class ExpressionQueue:
             self.current_length -= 1
             mps = self.get()
             yield mps.quality, mps.tce, mps.str_individuals
-
+"""
 
 class SearchTree:
     def __init__(self, maxsize=0):

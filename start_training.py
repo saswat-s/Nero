@@ -47,7 +47,7 @@ if __name__ == '__main__':
     # Neural related
     parser.add_argument("--neural_architecture", type=str,
                         default='DeepSet',
-                        help='[ST(Set Transformer),DeepSet]')
+                        help='DeepSet artihucture')
     parser.add_argument("--quality_function_training", type=str,
                         default='fmeasure',)
     parser.add_argument("--loss_func", type=str,

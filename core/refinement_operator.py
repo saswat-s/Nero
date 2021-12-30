@@ -10,7 +10,7 @@ from ontolearn.knowledge_base import KnowledgeBase
 
 from owlapy.render import DLSyntaxObjectRenderer
 from .expression import ClassExpression, AtomicExpression, ExistentialQuantifierExpression, \
-    UniversalQuantifierExpression, ComplementOfAtomicExpression, UnionClassExpression, IntersectionClassExpression
+    UniversalQuantifierExpression, ComplementOfAtomicExpression, UnionClassExpression, IntersectionClassExpression,Role
 
 
 class SimpleRefinement(BaseRefinement):
@@ -54,9 +54,10 @@ class SimpleRefinement(BaseRefinement):
             # (1.3) Initialize \forall r.E: E \in {N_C union + {T,Bot}}
             for mgur in self.kb.most_general_universal_restrictions(domain=self.kb.thing, filler=atomic_owl_class):
                 filler = self.expression[self.renderer.render(mgur.get_filler())]
+                role=Role(name=self.renderer.render(mgur.get_property()))
                 target = UniversalQuantifierExpression(
                     name=self.renderer.render(mgur),
-                    role=self.renderer.render(mgur.get_property()),
+                    role=role,
                     filler=filler,
                     str_individuals=set([_.get_iri().as_str() for _ in self.kb.individuals(mgur)]),
                     expression_chain=tuple(self.renderer.render(self.kb.thing)))
@@ -64,9 +65,11 @@ class SimpleRefinement(BaseRefinement):
             # (1.4) Initialize \exists r.E : E \in {N_C union + {T,Bot}}
             for mger in self.kb.most_general_existential_restrictions(domain=self.kb.thing, filler=atomic_owl_class):
                 filler = self.expression[self.renderer.render(mger.get_filler())]
+                role=Role(name=self.renderer.render(mger.get_property()))
+
                 target = ExistentialQuantifierExpression(
                     name=self.renderer.render(mger),
-                    role=self.renderer.render(mger.get_property()),
+                    role=role,
                     filler=filler,
                     str_individuals=set([_.get_iri().as_str() for _ in self.kb.individuals(mger)]),
                     expression_chain=tuple(self.renderer.render(self.kb.thing)))
