@@ -55,7 +55,7 @@ def run(args):
 if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument("--path_of_experiment_folder", type=str,
-                        default='Experiments/NeroFamily')
+                        default='Best/NeroFamily')
 
     parser.add_argument("--path_knowledge_base", type=str,
                         default='KGs/Family/Family.owl')

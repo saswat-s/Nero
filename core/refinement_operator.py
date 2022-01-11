@@ -10,11 +10,11 @@ from ontolearn.knowledge_base import KnowledgeBase
 
 from owlapy.render import DLSyntaxObjectRenderer
 from .expression import ClassExpression, AtomicExpression, ExistentialQuantifierExpression, \
-    UniversalQuantifierExpression, ComplementOfAtomicExpression, UnionClassExpression, IntersectionClassExpression,Role
+    UniversalQuantifierExpression, ComplementOfAtomicExpression, UnionClassExpression, IntersectionClassExpression, Role
 
 
 class SimpleRefinement(BaseRefinement):
-    def __init__(self, knowledge_base: KnowledgeBase):
+    def __init__(self, knowledge_base: KnowledgeBase, fast_init=False):
         super().__init__(knowledge_base)
         # 1. Number of named classes and sanity checking
         self.top_refinements = dict()
@@ -24,6 +24,7 @@ class SimpleRefinement(BaseRefinement):
         self.str_nc_star = None
         self.dict_sh_direct_down = dict()  # str -> str
         self.dict_sh_direct_up = dict()  # str -> str
+        self.fast_init = fast_init
 
         self.length_to_expression_str = dict()
         self.str_ae_to_neg_ae = dict()  # str -> Class Expression
@@ -54,7 +55,7 @@ class SimpleRefinement(BaseRefinement):
             # (1.3) Initialize \forall r.E: E \in {N_C union + {T,Bot}}
             for mgur in self.kb.most_general_universal_restrictions(domain=self.kb.thing, filler=atomic_owl_class):
                 filler = self.expression[self.renderer.render(mgur.get_filler())]
-                role=Role(name=self.renderer.render(mgur.get_property()))
+                role = Role(name=self.renderer.render(mgur.get_property()))
                 target = UniversalQuantifierExpression(
                     name=self.renderer.render(mgur),
                     role=role,
@@ -65,7 +66,7 @@ class SimpleRefinement(BaseRefinement):
             # (1.4) Initialize \exists r.E : E \in {N_C union + {T,Bot}}
             for mger in self.kb.most_general_existential_restrictions(domain=self.kb.thing, filler=atomic_owl_class):
                 filler = self.expression[self.renderer.render(mger.get_filler())]
-                role=Role(name=self.renderer.render(mger.get_property()))
+                role = Role(name=self.renderer.render(mger.get_property()))
 
                 target = ExistentialQuantifierExpression(
                     name=self.renderer.render(mger),
@@ -75,38 +76,66 @@ class SimpleRefinement(BaseRefinement):
                     expression_chain=tuple(self.renderer.render(self.kb.thing)))
                 self.__store(target, length=3)
 
-        # (2) Construct sh_down and sh_up
-        for k, v in self.expression.items():
-            k: str
-            v: ClassExpression
-            self.dict_sh_direct_down.setdefault(k, set())
-            if len(v.expression_chain) == 0:  # and k != '⊤':
-                v.expression_chain = tuple(self.renderer.render(self.kb.thing))
-            assert len(v.expression_chain) > 0
-            for x in v.expression_chain:
-                self.dict_sh_direct_down.setdefault(x, set()).add(k)
-                self.dict_sh_direct_up.setdefault(k, set()).add(x)
-        # Remove sh_down(T)=> T mapping
-        self.dict_sh_direct_down['⊤'].remove('⊤')
-        # Fill top refinements
-        for i in self.dict_sh_direct_down['⊤']:
-            ref = self.expression[i]
-            self.top_refinements.setdefault(ref.length, set()).add(ref)
+        if not self.fast_init:
+            # (2) Construct sh_down and sh_up
+            for k, v in self.expression.items():
+                k: str
+                v: ClassExpression
+                self.dict_sh_direct_down.setdefault(k, set())
+                if len(v.expression_chain) == 0:  # and k != '⊤':
+                    v.expression_chain = tuple(self.renderer.render(self.kb.thing))
+                assert len(v.expression_chain) > 0
+                for x in v.expression_chain:
+                    self.dict_sh_direct_down.setdefault(x, set()).add(k)
+                    self.dict_sh_direct_up.setdefault(k, set()).add(x)
+            # Remove sh_down(T)=> T mapping
+            self.dict_sh_direct_down['⊤'].remove('⊤')
+            # Fill top refinements
+            for i in self.dict_sh_direct_down['⊤']:
+                ref = self.expression[i]
+                self.top_refinements.setdefault(ref.length, set()).add(ref)
 
-        for i in self.expression_given_length(1):
-            if i.name in ['⊤', '⊥']:
-                continue
-            if '⊥' in self.dict_sh_direct_down[i.name]:
-                neg_i = ComplementOfAtomicExpression(
-                    name='¬' + i.name,
-                    atomic_expression=i,
-                    str_individuals=self.N_I.difference(i.str_individuals),
-                    expression_chain=tuple(self.renderer.render(self.kb.thing)))
+            for i in self.expression_given_length(1):
+                if i.name in ['⊤', '⊥']:
+                    continue
+                if '⊥' in self.dict_sh_direct_down[i.name]:
+                    neg_i = ComplementOfAtomicExpression(
+                        name='¬' + i.name,
+                        atomic_expression=i,
+                        str_individuals=self.N_I.difference(i.str_individuals),
+                        expression_chain=tuple(self.renderer.render(self.kb.thing)))
+                    self.__store(neg_i, length=2)
+                    self.str_ae_to_neg_ae[i.name] = neg_i
+                    self.top_refinements.setdefault(neg_i.length, set()).add(neg_i)
+            self.str_nc_star = set(list(self.expression.keys()))
+        else:
+            for i in self.expression_given_length(1):
+                if i.name in ['⊤', '⊥']:
+                    continue
+                neg_i = ComplementOfAtomicExpression(name='¬' + i.name, atomic_expression=i,
+                                                     str_individuals=self.N_I.difference(i.str_individuals),
+                                                     expression_chain=tuple(self.renderer.render(self.kb.thing)))
                 self.__store(neg_i, length=2)
-                self.str_ae_to_neg_ae[i.name] = neg_i
-                self.top_refinements.setdefault(neg_i.length, set()).add(neg_i)
 
-        self.str_nc_star = set(list(self.expression.keys()))
+    def str_to_exp(self, x: str):
+        try:
+            return self.expression[x]
+        except KeyError:
+            print(x)
+            print(self.expression.keys())
+            raise KeyError
+
+    def dict_to_exp(self, d: Dict):
+        name = d['name'].item()
+
+        if name in self.expression:
+            return self.expression[name]
+        new_exp = self.generate_exp_from_pandas_series(d)
+        self.__store(new_exp, new_exp.length)
+
+        assert new_exp.name in self.expression
+
+        return new_exp
 
     def __store(self, target: ClassExpression, length: int) -> None:
         """ Store an expression through indexing it with its length"""
@@ -124,7 +153,12 @@ class SimpleRefinement(BaseRefinement):
             if i.name in self.str_ae_to_neg_ae:
                 neg_i = self.str_ae_to_neg_ae[i.name]
             else:
-                neg_i = self.negate_atomic_class(i)
+                try:
+                    neg_i = self.negate_atomic_class(i)
+                except:
+                    print(i)
+                    print(i.expression_chain)
+                    exit(1)
             res.append(neg_i)
         return res
 
@@ -134,7 +168,9 @@ class SimpleRefinement(BaseRefinement):
             name='¬' + i.name,
             atomic_expression=i,
             str_individuals=self.N_I.difference(i.str_individuals),
-            expression_chain=(i.expression_chain[-1],))
+            # expression_chain=(i.expression_chain[-1],)
+            expression_chain=i.expression_chain)
+
         self.__store(neg_i, length=2)
         self.str_ae_to_neg_ae[i.name] = neg_i
         return neg_i
@@ -185,7 +221,7 @@ class SimpleRefinement(BaseRefinement):
         raise ValueError('Not found')
 
     def chain_gen(self, x: tuple) -> List[ClassExpression]:
-        if len(x) == 1:
+        if len(x) == 1 and isinstance(x[0], str):
             return [self.expression[x[0]]]
         elif len(x) == 2:
             return self.chain_gen((x[0],)) + self.chain_gen((x[1],))
@@ -203,6 +239,24 @@ class SimpleRefinement(BaseRefinement):
             print(x)
             raise ValueError
 
+    def expression_chain_atomic(self, x):
+        print(x)
+        index_of_tuples = []
+
+        exit(1)
+        res = set()
+
+        for i in x:
+            if isinstance(i, str) and i not in ['AND', 'OR', '⊤']:
+                """ i must be a concept """
+                res.add(i)
+            elif isinstance(i, str) and i in ['AND', 'OR', '⊤']:
+                """ IGNORE """
+            else:
+                assert isinstance(i, tuple)
+                res.update(self.expression_chain_atomic(i))
+        return res
+
     def expression_from_str(self, x: tuple) -> ClassExpression:
         try:
             assert isinstance(x, tuple)
@@ -213,6 +267,7 @@ class SimpleRefinement(BaseRefinement):
         if len(x) == 1:
             print(x)
             print('Single lookup')
+            print(self.expression[x])
             exit(1)
         elif len(x) == 2:
             print(len(x))

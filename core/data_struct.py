@@ -15,6 +15,7 @@ class State:
     def __str__(self):
         return f'{self.tce} | Quality:{self.quality:.3f}'
 
+
 """
 class ExpressionQueue:
     def __init__(self):
@@ -49,10 +50,14 @@ class ExpressionQueue:
             yield mps.quality, mps.tce, mps.str_individuals
 """
 
+
 class SearchTree:
     def __init__(self, maxsize=0):
         self.items_in_queue = PriorityQueue(maxsize)
         self.gate = dict()
+
+    def __contains__(self, key):
+        return key in self.gate
 
     def put(self, expression, key=None, condition=None):
         if condition is None:
@@ -70,11 +75,10 @@ class SearchTree:
         del self.gate[expression.name]
         return expression
 
+    def get_all(self):
+        return list(self.gate.values())
     def __len__(self):
         return len(self.gate)
-
-    def __contains__(self, x):
-        return x.name in self.gate
 
     def __iter__(self):
         # No garantie of returing best

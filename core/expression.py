@@ -1,24 +1,29 @@
+from abc import ABC, abstractmethod
 from typing import Set, List
 
 
 class TargetClassExpression:
     def __init__(self, *, label_id, name: str, idx_individuals: Set = None, expression_chain: List = None,
-                 length: int = None, str_individuals: Set = None
+                 length: int = None, str_individuals: Set = None, type=None
                  ):
 
         self.label_id = label_id
         self.name = name
         self.idx_individuals = idx_individuals
         self.str_individuals = str_individuals
-
+        self.type = type
         self.expression_chain = expression_chain
+
+        self.num_individuals = len(self.str_individuals)
+        """
         if self.idx_individuals is not None:
             self.num_individuals = len(self.idx_individuals)
         else:
             self.num_individuals = None
+        """
+
         self.length = length
         self.quality = None
-
     @property
     def size(self):
         return self.num_individuals
@@ -33,23 +38,67 @@ class TargetClassExpression:
         return self.__str__()
 
     def __mul__(self, other):
+        idx_individuals = None
+        str_individuals = None
+
+        if self.idx_individuals is not None and other.idx_individuals is not None:
+            idx_individuals = self.idx_individuals.intersection(other.idx_individuals)
+
+        if self.str_individuals is not None and other.str_individuals is not None:
+            str_individuals = self.str_individuals.intersection(other.str_individuals)
+        if self.length <= 2 and other.length <= 2:
+            name = f'{self.name} ⊓ {other.name}'
+        elif self.length <= 2 < other.length:
+            name = f'{self.name} ⊓ ({other.name})'
+        elif self.length > other.length <= 2:
+            name = f'({self.name}) ⊓ {other.name}'
+        elif self.length >= 2 and other.length >= 2:
+            name = f'({self.name}) ⊓ ({other.name})'
+        else:
+            print(self)
+            print(other)
+            raise ValueError
+
         return TargetClassExpression(
-            label_id=str(self.label_id) + '_and_' + str(other),
-            name=f'({self.name}) ⊓ ({other.name})',
-            idx_individuals=self.idx_individuals.intersection(other.idx_individuals),
-            # str_individuals=self.str_individuals.intersection(other.str_individuals),
-            expression_chain=self.expression_chain + [other.name], length=self.length + other.length + 1)
+            #label_id=str(self.label_id) + '_and_' + str(other),
+            name=name,#f'({self.name}) ⊓ ({other.name})',
+            #idx_individuals=idx_individuals,
+            str_individuals=str_individuals,
+            expression_chain=((self.expression_chain + (self.name,)), 'AND',
+                                                             (other.expression_chain + (other.name,))),
+            length=self.length + other.length + 1)
 
     def __add__(self, other):
+        idx_individuals = None
+        str_individuals = None
+
+        if self.idx_individuals is not None and other.idx_individuals is not None:
+            idx_individuals = self.idx_individuals.intersection(other.idx_individuals)
+
+        if self.str_individuals is not None and other.str_individuals is not None:
+            str_individuals = self.str_individuals.intersection(other.str_individuals)
+
+        if self.length <= 2 and other.length <= 2:
+            name = f'{self.name} ⊔ {other.name}'
+        elif self.length <= 2 < other.length:
+            name = f'{self.name} ⊔ ({other.name})'
+        elif self.length > other.length <= 2:
+            name = f'({self.name}) ⊔ {other.name}'
+        elif self.length >= 2 and other.length >= 2:
+            name = f'({self.name}) ⊔ ({other.name})'
+        else:
+            print(self)
+            print(other)
+            raise ValueError
+
         return TargetClassExpression(
-            label_id=str(self.label_id) + '_or_' + str(other),
-            name=f'({self.name}) ⊔ ({other.name})',
-            idx_individuals=self.idx_individuals.union(other.idx_individuals),
-            # str_individuals=self.str_individuals.union(other.str_individuals),
-            expression_chain=self.expression_chain + [other.name], length=self.length + other.length + 1)
-
-
-from abc import ABC, abstractmethod
+            #label_id=str(self.label_id) + '_or_' + str(other),
+            name=name,
+            #idx_individuals=idx_individuals,
+            str_individuals=str_individuals,
+            expression_chain=((self.expression_chain + (self.name,)), 'OR',
+                                                      (other.expression_chain + (other.name,))),
+            length=self.length + other.length + 1)
 
 
 class ClassExpression(ABC):

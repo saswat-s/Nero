@@ -14,8 +14,8 @@ import numpy as np
 import pandas as pd
 from core.static_funcs import *
 from core.loaders import *
-#from core.data_struct import ExpressionQueue
-#from core.static_funcs import ClosedWorld_ReasonerFactory,load_ncel
+# from core.data_struct import ExpressionQueue
+# from core.static_funcs import ClosedWorld_ReasonerFactory,load_ncel
 from core.dl_learner_binder import DLLearnerBinder
 
 from ontolearn import KnowledgeBase
@@ -25,6 +25,7 @@ import itertools
 from typing import Iterable, Dict, List, Any
 import pandas
 from core.expression import *
+
 
 def report_model_results(results, name):
     results = pd.DataFrame.from_dict(results)
@@ -80,27 +81,27 @@ if __name__ == '__main__':
     parser = ArgumentParser()
     # Path of an experiment folder
     parser.add_argument("--path_of_experiment_folder",
-                        #default='Best/NeroFamily',
-                        default='Best/NeroMutagenesis',
+                        # default='Experiments/Nero2022-01-08 10:27:32.685820',
+                        default='Best/NeroCarcinogenesis',
                         )
     parser.add_argument("--path_knowledge_base",
                         #default='KGs/Family/Family.owl',
-                        default='KGs/Mutagenesis/Mutagenesis.owl'
+                        default='KGs/Carcinogenesis/Carcinogenesis.owl'
                         )
     parser.add_argument("--path_of_json_learning_problems",
                         #default='LPs/Family/lp_dl_learner.json'
-                        default='LPs/Mutagenesis/lp_dl_learner.json'
+                        default='LPs/Carcinogenesis/lp_dl_learner.json'
                         )
     # Inference Related
     parser.add_argument("--topK", type=int, default=100,
                         help='Test the highest topK target expressions')
     parser.add_argument("--use_multiprocessing_at_parsing", type=int,
-                        default=1, help='1 or 0')
+                        default=0, help='1 or 0')
     parser.add_argument("--path_dl_learner", type=str,
                         default=None
                         # default=os.getcwd() + '/dllearner-1.4.0/'
                         )
     parser.add_argument("--max_runtime_dl_learner", type=int, default=10)
-    parser.add_argument('--use_search', default=None, help='Continues,SmartInit')
+    parser.add_argument('--use_search', default='SmartInit', help='None,SmartInit')
 
     run(parser.parse_args())

@@ -5,12 +5,15 @@ import json
 from dask import dataframe as ddf
 from .model import NERO
 from .neural_arch import DeepSet
-from .static_funcs import f_measure
+from .static_funcs import f_measure, ClosedWorld_ReasonerFactory
+from .refinement_operator import SimpleRefinement
+from ontolearn import KnowledgeBase
 import pandas as pd
-def load_target_class_expressions_and_instance_idx_mapping(args):
 
+
+def load_target_class_expressions_and_instance_idx_mapping(args):
     # (1) Extract Class Expressions
-    target_class_expressions = []
+    # target_class_expressions = []
     # df = pd.read_csv(args.path_of_experiment_folder + '/target_class_expressions.csv', index_col=0)
     if args.use_multiprocessing_at_parsing == 1:
         df = ddf.read_csv(args.path_of_experiment_folder + '/target_class_expressions.csv', dtype={'label_id': 'int',
@@ -27,16 +30,18 @@ def load_target_class_expressions_and_instance_idx_mapping(args):
         df = pd.read_csv(args.path_of_experiment_folder + '/target_class_expressions.csv', index_col=0)
 
     if args.use_search is not None:
+        target_class_expressions = df  # df.filter(['label_id', 'type','name', 'str_individuals', 'idx_individuals','expression_chain','length'])
+        """
         print('Parse KG')
         kb = KnowledgeBase(path=args.path_knowledge_base,
                            reasoner_factory=ClosedWorld_ReasonerFactory)
         rho = SimpleRefinement(knowledge_base=kb)
-
         for index, v in df.iterrows():
-            if 'length' not in v:
-                length_info = sum([2 if '¬' in _ else 1 for _ in v['name'].split()])
-            else:
-                length_info = v['length']
+            rho.dict_to_exp(v.to_dict())
+            continue
+        target_class_expressions.append(t)
+        """
+        """
             if v['type'] == 'atomic_expression':
                 t = rho.expression[v['name']]
                 t.label_id = int(v['label_id'])
@@ -73,10 +78,9 @@ def load_target_class_expressions_and_instance_idx_mapping(args):
                 print(v['type'])
                 raise ValueError
             assert len(t.idx_individuals) == len(eval(v['idx_individuals']))
-            target_class_expressions.append(t)
+            """
     else:
-        target_class_expressions = df.filter(['label_id', 'name', 'str_individuals', 'idx_individuals'])
-        del df
+        target_class_expressions = df  # df.filter(['label_id', 'type','name', 'str_individuals', 'idx_individuals','expression_chain','length'])
         """
         for index, v in df.iterrows():
             target_class_expressions.append(TargetClassExpression(label_id=v['label_id'],
@@ -89,7 +93,7 @@ def load_target_class_expressions_and_instance_idx_mapping(args):
     with open(args.path_of_experiment_folder + '/instance_idx_mapping.json', 'r') as f:
         instance_idx_mapping.update(json.load(f))
 
-    return target_class_expressions, instance_idx_mapping, None
+    return target_class_expressions, instance_idx_mapping
 
 
 def load_pytorch_module(args: Dict, path_of_experiment_folder) -> torch.nn.Module:
@@ -118,14 +122,16 @@ def load_nero(args):
     with open(args.path_of_experiment_folder + '/settings.json', 'r') as f:
         settings.update(json.load(f))
     # (2) Load target class expressions & instance_idx_mapping
-    target_class_expressions, instance_idx_mapping, df = load_target_class_expressions_and_instance_idx_mapping(args)
+    target_class_expressions, instance_idx_mapping = load_target_class_expressions_and_instance_idx_mapping(args)
+    if args.use_search == 'SmartInit':
+        kb_path = args.path_knowledge_base
+    else:
+        kb_path = None
     # (3) Load Pytorch Module
     model = NERO(model=load_pytorch_module(settings, args.path_of_experiment_folder),
                  quality_func=f_measure,
                  target_class_expressions=target_class_expressions,
                  instance_idx_mapping=instance_idx_mapping,
-                 target_retrieval_data_frame=df
-                 )
+                 kb_path=kb_path)
     model.eval()
     return model, time.time() - start_time
-
