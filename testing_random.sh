@@ -1,9 +1,9 @@
 # (1) Folder containing pretrained models
-folder_name="Experiments" #"PretrainedNero10K"
+folder_name="Best"
 # (2) Model
-dataset_name="Family"
+dataset_name="Carcinogenesis"
 path_of_experiment_folder="$PWD/$folder_name/Nero$dataset_name"
-topK=10
+topK=100
 # (3) Path of a knowledge base
 path_knowledge_base="$PWD/KGs/$dataset_name/$dataset_name.owl"
 # (4) Path of learning problems
@@ -17,7 +17,7 @@ path_dl_learner=$PWD'/dllearner-1.4.0/'
 echo "##################"
 echo "Evaluate NERO on $path_of_experiment_folder benchmark dataset by using randomly generated learning problems of having 5 individuals"
 echo "##################"
-python reproduce_experiments.py --path_of_experiment_folder "$path_of_experiment_folder" --path_knowledge_base "$path_knowledge_base" --path_of_json_learning_problems "$path_of_json_learning_problems_size5" --path_dl_learner "$path_dl_learner" --topK $topK
+python reproduce_experiments.py --path_of_experiment_folder "$path_of_experiment_folder" --path_knowledge_base "$path_knowledge_base" --path_of_json_learning_problems "$path_of_json_learning_problems_size5" --path_dl_learner "$path_dl_learner" --topK $topK --use_search "None"
 echo "Evaluation Ends"
 
 echo "##################"
@@ -25,7 +25,6 @@ echo "Evaluate NERO on $path_of_experiment_folder benchmark dataset by using ran
 echo "##################"
 python reproduce_experiments.py --path_of_experiment_folder "$path_of_experiment_folder" --path_knowledge_base "$path_knowledge_base" --path_of_json_learning_problems "$path_of_json_learning_problems_size10" --path_dl_learner "$path_dl_learner" --topK $topK
 echo "Evaluation Ends"
-
 
 echo "##################"
 echo "Evaluate NERO on $path_of_experiment_folder benchmark dataset by using randomly generated learning problems of having 15 individuals"
