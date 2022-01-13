@@ -77,6 +77,7 @@ class SearchTree:
 
     def get_all(self):
         return list(self.gate.values())
+
     def __len__(self):
         return len(self.gate)
 

@@ -20,13 +20,8 @@ from itertools import chain
 from sklearn.decomposition import PCA
 import seaborn as sns
 import matplotlib.pyplot as plt
+
 sns.set_style("whitegrid")
-
-
-try:
-    from reprlib import repr
-except ImportError:
-    pass
 
 import torch
 from owlapy.model import OWLOntology, OWLReasoner
@@ -37,16 +32,6 @@ import gc
 from .expression import TargetClassExpression, ClassExpression, UniversalQuantifierExpression, \
     ExistentialQuantifierExpression, Role
 from .refinement_operator import SimpleRefinement
-
-"""
-def get_all_atomic_class_expressions(kb):
-    renderer = DLSyntaxObjectRenderer()
-    for owl_class in kb.get_all_sub_concepts(kb.thing):
-        yield ClassExpression(name=renderer.render(owl_class),
-                              str_individuals=set(_.get_iri().as_str() for _ in kb.individuals(owl_class)),
-                              owl_class=owl_class,
-                              expression_chain=['Thing'])
-"""
 
 
 def single_universal_quantifier(*, kb, filler, atomic_look_up, role_look_up):
@@ -154,7 +139,6 @@ def select_target_expressions(kb, args, logger):
 
 def target_expressions_binary_selection_via_refining_top(rho, kb, number_of_target_expressions, num_of_all_individuals,
                                                          instance_idx_mapping):
-    # TODO: Later we can remove length base refinement and do everything via startin from T, N_C, \forall etc.
     rl_state = RL_State(kb.thing, parent_node=None, is_root=True)
     rl_state.length = kb.concept_len(kb.thing)
     rl_state.instances = set(kb.individuals(rl_state.concept))
@@ -541,51 +525,6 @@ def ClosedWorld_ReasonerFactory(onto: OWLOntology) -> OWLReasoner:
     return reasoner
 
 
-def total_size(o, handlers={}, verbose=False):
-    """ Returns the approximate memory footprint an object and all of its contents.
-
-    Automatically finds the contents of the following builtin containers and
-    their subclasses:  tuple, list, deque, dict, set and frozenset.
-    To search other containers, add handlers to iterate over their contents:
-
-        handlers = {SomeContainerClass: iter,
-                    OtherContainerClass: OtherContainerClass.get_elements}
-
-    CD: obtained from one and only  Raymond Hettinger :)
-    source : https://code.activestate.com/recipes/577504/
-
-    """
-    dict_handler = lambda d: chain.from_iterable(d.items())
-    all_handlers = {tuple: iter,
-                    list: iter,
-                    deque: iter,
-                    dict: dict_handler,
-                    set: iter,
-                    frozenset: iter,
-                    }
-    all_handlers.update(handlers)  # user handlers take precedence
-    seen = set()  # track which object id's have already been seen
-    default_size = getsizeof(0)  # estimate sizeof object without __sizeof__
-
-    def sizeof(o):
-        if id(o) in seen:  # do not double count the same object
-            return 0
-        seen.add(id(o))
-        s = getsizeof(o, default_size)
-
-        if verbose:
-            print(s, type(o), repr(o), file=stderr)
-
-        for typ, handler in all_handlers.items():
-            if isinstance(o, typ):
-                s += sum(map(sizeof, handler(o)))
-                break
-        return s
-
-    return sizeof(o)
-
-
-
 def using(point=""):
     usage = resource.getrusage(resource.RUSAGE_SELF)
     return '''%s: usertime=%s systime=%s mem=%s mb ''' % (point, usage[0], usage[1], usage[2] / 1024.0)
@@ -597,7 +536,7 @@ def save_as_json(*, storage_path=None, obj=None, name=None):
 
 
 def apply_rho_on_rl_state(rl_state, rho, kb):
-    for i in rho.refine(rl_state.concept):
+    for i in rho.downward_refine(rl_state.concept):
         next_rl_state = RL_State(i, parent_node=rl_state)
         next_rl_state.length = kb.concept_len(next_rl_state.concept)
         next_rl_state.instances = set(kb.individuals(next_rl_state.concept))
@@ -732,7 +671,7 @@ def save_weights(model, storage_path):
     torch.save(model.state_dict(), storage_path + f'/final_model.pt')
 
 
-def selective_2Dplot(pre_trained_nero, concepts, f=sns.scatterplot,path_save_fig='2dplot.png'):
+def selective_2Dplot(pre_trained_nero, concepts, f=sns.scatterplot, path_save_fig='2dplot.png'):
     for c in concepts:
         c.embeddings = pre_trained_nero.positive_expression_embeddings(
             c.str_individuals).cpu().detach().numpy().flatten()
@@ -750,4 +689,3 @@ def selective_2Dplot(pre_trained_nero, concepts, f=sns.scatterplot,path_save_fig
     plt.savefig(path_save_fig)
     plt.plot()
     plt.show()
-

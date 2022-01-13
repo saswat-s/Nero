@@ -209,7 +209,7 @@ class IntersectionClassExpression(ClassExpression):
         self.concepts = concepts
 
     def __str__(self):
-        return f'UnionClassExpression at {hex(id(self))} | {self.name} | Indv:{self.num_individuals} | Quality:{self.quality}'  # | expression_chain:{self.expression_chain}'
+        return f'IntersectionClassExpression at {hex(id(self))} | {self.name} | Indv:{self.num_individuals} | Quality:{self.quality}'  # | expression_chain:{self.expression_chain}'
 
 
 class AtomicExpression(ClassExpression):
@@ -223,8 +223,8 @@ class AtomicExpression(ClassExpression):
         self.label_id = label_id
         self.idx_individuals = idx_individuals
 
-    # def __str__(self):
-    #    return f'AtomicExpression at {hex(id(self))} | {self.name} | Indv:{self.num_individuals} | Quality:{self.quality:.3f}'  # | expression_chain:{self.expression_chain}'
+    def __str__(self):
+        return f'AtomicExpression at {hex(id(self))} | {self.name} | Indv:{self.num_individuals} | Quality:{self.quality:.3f}'  # | expression_chain:{self.expression_chain}'
 
 
 class ComplementOfAtomicExpression(ClassExpression):
@@ -289,3 +289,9 @@ class Role:
     def __init__(self, *, name: str):
         assert isinstance(name, str)
         self.name = name
+
+    def __str__(self):
+        return f'Role at {hex(id(self))} | {self.name}'
+
+    def __repr__(self):
+        return self.__str__()

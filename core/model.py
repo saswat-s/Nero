@@ -1,7 +1,7 @@
 import pandas as pd
 import torch
 from torch import nn
-from typing import Dict, List, Iterable, Set
+from typing import Dict, List, Iterable, Set, Tuple
 from .expression import *
 from owlapy.render import DLSyntaxObjectRenderer
 from .static_funcs import ClosedWorld_ReasonerFactory
@@ -30,28 +30,135 @@ class NERO:
 
         self.retrieve_counter = 0
         self.target_retrieval_data_frame = target_retrieval_data_frame
-
+        self.dummy=kb_path
         if kb_path:
-            self.str_to_nc = self.extract_nc(
+            # (1) Read atomic expressions
+            self.str_to_atomic_exp = self.extract_nc(
                 self.target_class_expressions[self.target_class_expressions['length'] == 1])
-            self.neg_nc = self.negate_nc(self.str_to_nc.values(), self.str_all_individuals)
-            self.str_to_existential_quantifiers = self.extract_quantifiers(
-                self.target_class_expressions[
-                    self.target_class_expressions['type'] == 'universal_quantifier_expression'],
-                UniversalQuantifierExpression, self.str_to_nc)
+            # (2) Read negated atomic expressions
+            self.neg_nc = self.negate_nc(self.str_to_atomic_exp.values(), self.str_all_individuals)
+            # (3) Read universal quantifiers
             self.str_to_universal_quantifiers = self.extract_quantifiers(
                 self.target_class_expressions[
+                    self.target_class_expressions['type'] == 'universal_quantifier_expression'],
+                UniversalQuantifierExpression, self.str_to_atomic_exp)
+            # (3) Read existential quantifiers
+            self.str_to_existential_quantifiers = self.extract_quantifiers(
+                self.target_class_expressions[
                     self.target_class_expressions['type'] == 'existantial_quantifier_expression'],
-                ExistentialQuantifierExpression, self.str_to_nc)
-            self.expression = {**self.str_to_nc, **self.neg_nc, **self.str_to_existential_quantifiers,
+                ExistentialQuantifierExpression, self.str_to_atomic_exp)
+            # (4) Easy access
+            self.expression = {**self.str_to_atomic_exp, **self.neg_nc, **self.str_to_existential_quantifiers,
                                **self.str_to_universal_quantifiers}
+            # (5) Create hierarchies
+            self.str_to_sh_down, self.str_to_sh_up = self.construct_subsumption_hierarchy()
+
+            # (6) Create leaf atomic concepts
+            self.set_of_least_general_atomic_expressions = {self.expression[k] for k, v in self.str_to_sh_down.items()
+                                                            if len(v) == 0}
+            # (7) Refinement of rho(⊤)
+            self.top_refinements = set()
+            self.top_refinements.update({i for i in self.str_to_sh_down['⊤']})
+            # rho(⊤) contains all negated leaf nodes
+            self.top_refinements.update(
+                {self.expression['¬' + k] for k, v in self.str_to_sh_down.items() if len(v) == 0})
+            self.set_of_most_general_universal_quantifiers = set()
+            self.set_of_most_general_existential_quantifiers = set()
+            for _, exp1 in self.str_to_universal_quantifiers.items():
+                filler_exp1 = exp1.filler
+                # If a filler is bottom, ignore it
+                if filler_exp1 == '⊥':
+                    continue
+                # If filler is a T, add it.
+                if filler_exp1 == '⊤':
+                    self.set_of_most_general_universal_quantifiers.add(exp1)
+                    continue
+                # if filler is a leaf exp, ignore it
+                if filler_exp1 in self.set_of_least_general_atomic_expressions:
+                    continue
+
+                if isinstance(filler_exp1, str):
+                    if filler_exp1 in self.str_to_sh_up:
+                        for x in self.str_to_sh_up[filler_exp1]:
+                            n = exp1.name.split('.')[0]
+                            new_name = n + '.' + x.name
+                            if new_name in self.expression:
+                                self.set_of_most_general_universal_quantifiers.add(self.expression[new_name])
+                else:
+                    if filler_exp1.name in self.str_to_sh_up:
+                        for x in self.str_to_sh_up[filler_exp1.name]:
+                            n = exp1.name.split('.')[0]
+                            new_name = n + '.' + x.name
+                            if new_name in self.expression:
+                                self.set_of_most_general_universal_quantifiers.add(self.expression[new_name])
+
+            for _, exp1 in self.str_to_existential_quantifiers.items():
+                filler_exp1 = exp1.filler
+                # If a filler is bottom, ignore it
+                if filler_exp1 == '⊥':
+                    continue
+                # If filler is a T, add it.
+                if filler_exp1 == '⊤':
+                    self.set_of_most_general_universal_quantifiers.add(exp1)
+                    continue
+                # if filler is a leaf exp, ignore it
+                if filler_exp1 in self.set_of_least_general_atomic_expressions:
+                    continue
+                if isinstance(filler_exp1, str):
+                    if filler_exp1 in self.str_to_sh_up:
+                        for x in self.str_to_sh_up[filler_exp1]:
+                            n = exp1.name.split('.')[0]
+                            new_name = n + '.' + x.name
+                            if new_name in self.expression:
+                                self.set_of_most_general_existential_quantifiers.add(self.expression[new_name])
+                else:
+                    if filler_exp1.name in self.str_to_sh_up:
+                        for x in self.str_to_sh_up[filler_exp1.name]:
+                            n = exp1.name.split('.')[0]
+                            new_name = n + '.' + x.name
+                            if new_name in self.expression:
+                                self.set_of_most_general_existential_quantifiers.add(self.expression[new_name])
+
+            self.top_refinements.update(self.set_of_most_general_universal_quantifiers)
+            self.top_refinements.update(self.set_of_most_general_existential_quantifiers)
         else:
             self.expression = dict()
 
+    def construct_subsumption_hierarchy(self) -> Tuple[Dict, Dict]:
+        """ Construct Direct subsumption up and down hierarchy """
+        # Direct subsumption down hierarchy
+        str_to_sh_down = dict()
+        # Direct subsumption up hierarchy
+        str_to_sh_up = dict()
+        for _, exp in self.str_to_atomic_exp.items():
+            str_to_sh_down.setdefault(_, set())
+            for i in exp.expression_chain:
+                str_to_sh_down.setdefault(i, set()).add(exp)
+        for k, v in str_to_sh_down.items():
+            # print(k, [i.name for i in v]) #to plot direct submsumpion hierahry
+            for i in v:
+                str_to_sh_up.setdefault(i.name, set())
+                if k == '⊤':
+                    str_to_sh_up.setdefault(i.name, set()).add('T')
+                else:
+                    if k in self.expression:
+                        str_to_sh_up.setdefault(i.name, set()).add(self.expression[k])
+
+        return str_to_sh_down, str_to_sh_up
+
+    @staticmethod
+    def leaf_atomic_expressions(x: Dict, y: Dict) -> Set:
+        """ Construct leaf expressions from a hierarhy """
+        res = set()
+        for k, v in y.items():
+            if k not in x:
+                res.add(v)
+        return res
+
     @staticmethod
     def extract_nc(df: pd.DataFrame):
+        """ Deserialize atomic expressions from a pandas DataFrame"""
         res = dict()
-
         for i, d in df.iterrows():
             new_obj = AtomicExpression(name=d['name'],
                                        label_id=d['label_id'],
@@ -59,9 +166,6 @@ class NERO:
                                        expression_chain=eval(d['expression_chain']),
                                        idx_individuals=eval(d['idx_individuals']))
             res[new_obj.name] = new_obj
-        #for k, v in res.items():
-        #    v.expression_chain = [res[i] for i in v.expression_chain if i != '⊤']
-
         return res
 
     @staticmethod
@@ -75,7 +179,6 @@ class NERO:
     @staticmethod
     def extract_quantifiers(df: pd.DataFrame, cls, atomic_to_exp):
         res = dict()
-
         for i, d in df.iterrows():
             str_role, str_filler = d['name'].split()[1].split('.')
             filler = atomic_to_exp[str_filler] if str_filler in atomic_to_exp else str_filler
@@ -89,16 +192,12 @@ class NERO:
         return res
 
     def str_to_expression(self, x: str) -> ClassExpression:
+        """ An ALC expressions in string format to an instance of ClassExpression """
         if x in self.expression:
             return self.expression[x]
         # Check in the pandas frame
         row = self.target_class_expressions[self.target_class_expressions['name'] == x]
         return self.pandas_series_to_exp(row)
-
-    def get_target_exp_found_in_chain(self, expression_chain):
-        for i in expression_chain:
-            if i in self.str_target_class_expression_to_label_id:
-                yield self.target_class_expressions[self.str_target_class_expression_to_label_id[i]]
 
     def call_quality_function(self, *, set_str_individual: Set[str], set_str_pos: Set[str],
                               set_str_neg: Set[str]) -> float:
@@ -131,32 +230,6 @@ class NERO:
         assert len(pos) > 0
         assert len(neg) > 0
 
-    def single_dl_exp_learning(self, set_str_pos, set_str_neg, n):
-
-        _, sort_idxs = torch.sort(
-            self.forward(xpos=torch.LongTensor([[self.instance_idx_mapping[i] for i in set_str_pos]]),
-                         xneg=torch.LongTensor([[self.instance_idx_mapping[i] for i in set_str_neg]])), dim=1,
-            descending=True)
-        sort_idxs = sort_idxs.cpu().numpy()[0]
-        results = ExpressionQueue()
-        for idx_target in sort_idxs[:100]:
-            expression = self.target_class_expressions[idx_target]
-            str_instances = {self.inverse_instance_idx_mapping[_] for _ in expression.idx_individuals}
-
-            # True positive and True Negative should be as large as possible
-            tp = len(set_str_pos.intersection(str_instances))
-            tn = len(set_str_neg.difference(str_instances))
-            # False Negative and False Positive should be as less as possible
-            fn = len(set_str_pos.difference(str_instances))
-            fp = len(set_str_neg.intersection(str_instances))
-
-            # fully coverage score and as small as possible
-            s = (tp + tn) / (tp + tn + fp + fn)
-
-            # Sort expression with their negative coverage of intersection of E^- and Target exp
-            results.put(s, expression, str_instances)
-        return results.get_top(n)
-
     def str_to_index_mapping(self, individuals: List[str]) -> List[int]:
         try:
             return [self.instance_idx_mapping[i] for i in individuals]
@@ -178,6 +251,7 @@ class NERO:
             return {self.inverse_instance_idx_mapping[_] for _ in target_class_expression.idx_individuals}
 
     def generate_exp_from_pandas_series(self, d):
+        """ Create an instance of expression from pandas series """
         type_ = d['type'].item()
         name = d['name'].item()
 
@@ -216,7 +290,7 @@ class NERO:
                                                     idx_individuals=eval(d['idx_individuals'].item()))
         elif type_ == 'union_expression':
             #            print(d)
-            # '(atomic_expression at 0x7f63ab372130 | Male | Indv:104 | Quality:-1.000, atomic_expression at 0x7f63ab349340 | Grandmother | Indv:35 | Quality:-1.000)'
+            # '(atomic_expression at 0x7f63ab372130 | XXXX | Indv:104 | Quality:-1.000, atomic_expression at 0x7f63ab349340 | YYYY | Indv:35 | Quality:-1.000)'
             str_concepts = d['concepts'].item()[1:-1].split(',')
             str_a, str_b = str_concepts[0].split(' | ')[1], str_concepts[1].split(' | ')[1]
             new_obj = UnionClassExpression(name=d['name'].item(),
@@ -243,21 +317,22 @@ class NERO:
             print(type_)
             print(d)
             raise ValueError
-        self.expression[new_obj.name] = new_obj
+        #self.expression[new_obj.name] = new_obj
         return new_obj
 
     def pandas_series_to_exp(self, d: pd.Series):
+        """ Construct an expression from pandas dataframe"""
         name = d['name'].item()
-        if name in self.expression:
-            return self.expression[name]
+        #if name in self.expression:
+        #    return self.expression[name]
         new_exp = self.generate_exp_from_pandas_series(d)
-        assert new_exp.name in self.expression
         return new_exp
 
     def select_target_expression(self, idx: int):
         # (5) Look up target class expression
         row = self.target_class_expressions[self.target_class_expressions['label_id'] == idx]
         if len(self.expression) == 0:
+            # Each target/label is an instance of TargetClassExpression
             return TargetClassExpression(label_id=row['label_id'].item(),
                                          name=row['name'].item(),
                                          # type=type_,
@@ -287,7 +362,7 @@ class NERO:
         'NumClassTested': ...,
         'Runtime': ...}
         """
-        # (1) Initialize Learning Problem.
+        # (1) Initialize learning problem.
         self.predict_sanity_checking(pos=str_pos, neg=str_neg, topK=topK)
         start_time = time.time()
         self.retrieve_counter = 0
@@ -306,31 +381,21 @@ class NERO:
         for idx_target in sort_idxs[:topK]:
             target_ce = self.select_target_expression(idx_target)
             # (5) Retrieval of instance.
-            str_individuals = self.retrieval_of_individuals(target_ce)
-
+            target_ce.str_individuals = self.retrieval_of_individuals(target_ce)
             # (6) Compute Quality.
-            quality_score = self.call_quality_function(set_str_individual=str_individuals,
-                                                       set_str_pos=set_pos,
-                                                       set_str_neg=set_neg)
-            target_ce.quality = quality_score
-            target_ce.str_individuals = str_individuals
-            # (7) Put CE into the priority queue.
-            top_prediction_queue.put(target_ce, key=-quality_score)
+            target_ce.quality = self.call_quality_function(set_str_individual=target_ce.str_individuals,
+                                                           set_str_pos=set_pos,
+                                                           set_str_neg=set_neg)
+            # (7) Put predicted expression into the priority queue.
+            top_prediction_queue.put(target_ce, key=-target_ce.quality)
             # (8) If goal is found, we do not need to compute scores.
-            if quality_score == 1.0:
+            if target_ce.quality == 1.0:
                 goal_found = True
                 break
         assert len(top_prediction_queue) > 0
         # (9) IF goal is not found, we do search
         if goal_found is False:
-            if use_search == 'Continues':
-                best_pred = top_prediction_queue.get()
-                top_prediction_queue.put(best_pred, key=-best_pred.quality)
-                self.apply_continues_search(top_prediction_queue, set_pos, set_neg)
-                best_constructed_expression = top_prediction_queue.get()
-                if best_constructed_expression > best_pred:
-                    best_pred = best_constructed_expression
-            elif use_search == 'SmartInit':
+            if use_search == 'SmartInit':
                 best_pred = top_prediction_queue.get()
                 top_prediction_queue.put(best_pred, key=-best_pred.quality)
                 top_prediction_queue = self.search_with_init(top_prediction_queue, set_pos, set_neg)
@@ -355,72 +420,234 @@ class NERO:
                   }
         return report
 
-    def search_with_init(self, top_prediction_queue, set_pos, set_neg):
+    def downward_refine(self, expression):
         """
-        Standard search with smart initialization
+        top-down/downward refinement operator
+        \forall s \in \StateSpace : \rho(s) \subseteq \{ s^i \in \StateSpace \;|\; s^i \preceq s \}.
+        Implementation is based on the top down refinement operator definition in
+        (Concept Learning in Description Logics Using Refinement Operators)
+        \rho_b(C) domain b based intersections is carried out via disjoint checks.
+        """
+        if isinstance(expression, str):
+            # (1) Length constraint refinement of Top .
+            if expression == '⊤':
+                return self.top_refinements
+            # Bottom can not be refined.
+            # if expression == '⊥':
+            return {}
+        x_type = expression.type
+        refinements = set()
+        if x_type == 'union_expression':
+            # Given C \equiv A \sqcup B, =>
+            # (1) {\rho(A) \sqcup B} \cup
+            # (2) {A \sqcup \rho(B)} \cup
+            # (3) {A \sqcup B \sqcap T} \in \rho(C)
+            A, B = expression.concepts
+            # (1)
+            for rho_A in self.downward_refine(A):
+                refinements.add(rho_A + B)
+            # (2)
+            for rho_B in self.downward_refine(B):
+                refinements.add(rho_B + A)
+            # (3)
+            # for i in self.top_refinements:
+            #    if not i.str_individuals.isdisjoint(expression.str_individuals):
+            #        refinements.add(i * expression)
+        elif x_type == 'intersection_expression':
+            # Given C \equiv A \sqcap B, =>
+            # (1) {\rho(A) \sqcap B} \cup
+            # (2) {A \sqcap \rho(B)} \cup
+            A, B = expression.concepts
+            # (1)
+            for rho_A in self.downward_refine(A):
+                if not rho_A.str_individuals.isdisjoint(B.str_individuals):
+                    refinements.add(rho_A * B)
+            # (2)
+            for rho_B in self.downward_refine(B):
+                if not rho_B.str_individuals.isdisjoint(A.str_individuals):
+                    refinements.add(rho_B * A)
+        elif x_type == 'atomic_expression':
+            if expression.name in self.str_to_sh_down:
+                for i in self.str_to_sh_down[expression.name]:
+                    refinements.add(i)
+            for i in self.top_refinements:
+                if not i.str_individuals.isdisjoint(expression.str_individuals):
+                    refinements.add(i * expression)
 
-        :param top_prediction_queue:
-        :param rho:
-        :param set_pos:
-        :param set_neg:
-        :return:
-        """
-        # predictions=top_prediction_queue.get_all()
-        heuristic_st = SearchTree()
+        elif x_type == 'negated_expression':
+            # ¬Father, ¬Male \in refine (¬Father)
+            str_not_expression = expression.name[1:]
+            for i in self.str_to_sh_up[str_not_expression]:
+                if isinstance(i, str):
+                    assert i == 'T'
+                else:
+                    refinements.add(self.expression['¬' + i.name])
+            # for i in self.top_refinements:
+            #    if not i.str_individuals.isdisjoint(expression.str_individuals):
+            #        refinements.add(i * expression)
+        elif x_type == 'existantial_quantifier_expression':
+            # C \equiv ∃ r.A (e.g. ∃ hasSibling.Parent)
+            # (1) {∃ r.B | B \in \rho(A)} \cup
+            # (2) {(∃ r.A) \sqcap B | B \in \rho(T)}
+            # (1)
+            for i in self.downward_refine(expression.filler):
+                n = expression.name.split('.')[0] + '.' + i.name
+                if n in self.expression:
+                    refinements.add(self.expression[n])
+                else:
+                    continue
+                    """
+                    try:
+                        assert i.type in ['intersection_expression', 'union_expression']
+                    except:
+                        print(expression)
+                        print(n)
+                        print(i)
+                        print(self.expression[n])
+                        exit(1)
+
+                    for x in i.concepts:
+                        if x.name == expression.filler.name:
+                            continue
+                        if x.type == 'atomic_expression':
+                            n = expression.name.split('.')[0] + '.' + x.name
+                            if n in self.expression:
+                                refinements.add(self.expression[n])
+
+                        elif x.type == 'negated_expression':
+                            str_not_expression = x.name[1:]
+                            store = set()
+                            for up_str_not_expression in self.str_to_sh_down[expression.filler.name]:
+                                if str_not_expression == up_str_not_expression.name:
+                                    continue
+                                n = expression.name.split('.')[0] + '.' + up_str_not_expression.name
+                                if n in self.expression:
+                                    store.add(self.expression[n])
+                            import itertools
+                            refinements.update(itertools.accumulate(store))
+
+                        elif x.type in ['universal_quantifier_expression', 'existantial_quantifier_expression']:
+                            if x.name != expression.name:
+                                a = x * expression
+                                self.expression[a.name] = a
+                                refinements.add(self.expression[a.name])
+                        else:
+                            raise ValueError
+                    """
+            # (2)
+            # for i in self.top_refinements:
+            #    if not i.str_individuals.isdisjoint(expression.str_individuals):
+            #        refinements.add(i * expression)
+        elif x_type == 'universal_quantifier_expression':
+            # C \equiv ∀ r.A (e.g. ∀ married.Brother)
+            # (1) {∀ r.\rho(A)}
+            # \cup
+            if not isinstance(expression.filler, str):
+                for i in self.downward_refine(expression.filler):
+                    n = expression.name.split('.')[0] + '.' + i.name
+                    if n in self.expression:
+                        refinements.add(self.expression[n])
+            # for i in self.top_refinements:
+            #    if not i.str_individuals.isdisjoint(expression.str_individuals):
+            #        refinements.add(i * expression)
+
+        else:
+            raise KeyError('Error in expression type')
+        return refinements
+
+    def upward_refine(self, expression):
+        """ \forall s \in \StateSpace : \rho(s) \subseteq \{ s^i \in \StateSpace \;|\; s \preceq  s^i \} """
+        if isinstance(expression, str):
+            if expression == '⊥':
+                return self.set_of_least_general_atomic_expressions
+            return {}
+
+        x_type = expression.type
+        refinements = set()
+
+        if x_type == 'union_expression':
+
+            A, B = expression.concepts
+            refinements.add(A)
+            refinements.add(B)
+            for rho_A in self.upward_refine(A):
+                refinements.add(rho_A)
+            for rho_B in self.upward_refine(B):
+                refinements.add(rho_B)
+        elif x_type == 'intersection_expression':
+            A, B = expression.concepts
+            refinements.add(A)
+            refinements.add(B)
+            for rho_A in self.upward_refine(A):
+                refinements.add(rho_A + B)
+            for rho_B in self.upward_refine(B):
+                refinements.add(rho_B + A)
+        elif x_type == 'atomic_expression':
+            if expression.name in self.str_to_sh_up:
+                for i in self.str_to_sh_up[expression.name]:
+                    refinements.add(i)
+        elif x_type == 'negated_expression':
+            # ¬Son ?
+            str_not_expression = expression.name[1:]
+            for i in self.downward_refine(self.expression[str_not_expression]):
+                name = '¬' + i.name
+                if name in self.expression:
+                    refinements.add(self.expression['¬' + i.name])
+        elif x_type == 'existantial_quantifier_expression':
+            for i in self.upward_refine(expression.filler):
+                n = expression.name.split('.')[0] + '.' + i.name
+                if n in self.expression:
+                    refinements.add(self.expression[n])
+        elif x_type == 'universal_quantifier_expression':
+            for i in self.upward_refine(expression.filler):
+                n = expression.name.split('.')[0] + '.' + i.name
+                if n in self.expression:
+                    refinements.add(self.expression[n])
+        else:
+            raise KeyError('Error in expression type')
+        return refinements
+
+    def search_with_init(self, top_prediction_queue, set_pos, set_neg):
+        """ Standard search with smart initialization """
+
+        search_tree = SearchTree()
         # (2) Iterate over advantages states
         while len(top_prediction_queue) > 0:
-            # (2.1) Get top ranked Description Logic Expressions: C
-            nero_mode_class_expression = top_prediction_queue.get()
-            # (2.2) Compute heuristic val: C: A OPT B
-            heuristic_st.put(nero_mode_class_expression,
-                             key=-nero_mode_class_expression.quality)
-            # (2.3) Add constructor expressions
-            if nero_mode_class_expression.type == 'union_expression':
-                for i in nero_mode_class_expression.concepts:
-                    if i.quality == -1:  # default
-                        i.quality = self.call_quality_function(
-                            set_str_individual=i.str_individuals,
-                            set_str_pos=set_pos,
-                            set_str_neg=set_neg)
-                    heuristic_st.put(i, key=-i.quality)
-            # (2.4) Add constructor expressions
-            elif nero_mode_class_expression.type == 'intersection_expression':
-                for i in nero_mode_class_expression.concepts:
-                    if i.quality == -1:  # default
-                        i.quality = self.call_quality_function(
-                            set_str_individual=i.str_individuals,
-                            set_str_pos=set_pos,
-                            set_str_neg=set_neg)
-                    heuristic_st.put(i, key=-i.quality)
-
-        return heuristic_st
-        """
-        
-        exit(1)
-        explored_states = SearchTree()
-        exploited_states = SearchTree()
-        explored_states.extend_queue(heuristic_st)
-
-        for i in range(3):
-            s = explored_states.get()
-            if s in exploited_states:
-                continue
-            exploited_states.put(s, key=-s.quality)
-
-            for x in rho.refine(s):
-                if len(x.str_individuals) and (x not in explored_states or x not in exploited_states):
-                    x.quality = self.call_quality_function(
-                        set_str_individual=x.str_individuals,
+            # (2.1) Get top ranked Description Logic Expressions: C.
+            c = top_prediction_queue.get()
+            # (2.2) Compute heuristic val of  C.
+            search_tree.put(c, key=-c.quality)
+            for a in self.downward_refine(c).union(self.upward_refine(c)):
+                if a not in search_tree or a not in top_prediction_queue:
+                    a.quality = self.call_quality_function(
+                        set_str_individual=a.str_individuals,
                         set_str_pos=set_pos,
                         set_str_neg=set_neg)
-                    explored_states.put(x, key=-x.quality)
-                if x.quality == 1.0:
-                    break
+                    search_tree.put(a, key=-a.quality)
+        return search_tree
 
-        exploited_states.extend_queue(explored_states)
-        return exploited_states
-        """
+    def __str__(self):
+        return f'NERO with {self.model.name}'
 
+    def train(self):
+        self.model.train()
+
+    def eval(self):
+        self.model.eval()
+
+    def to(self, device):
+        self.model.to(device)
+
+    def state_dict(self):
+        return self.model.state_dict()
+
+    def parameters(self):
+        return self.model.parameters()
+
+    def embeddings_to_numpy(self):
+        return self.model.embeddings.weight.data.detach().numpy()
+
+    # Outdated.
     def apply_continues_search(self, top_states, set_str_pos: Set[str], set_str_neg: Set[str]):
         """
 
@@ -539,23 +766,35 @@ class NERO:
                 break
         assert len(top_states) <= max_size
 
-    def __str__(self):
-        return f'NERO with {self.model.name}'
+    # Maybe Outdated
+    def get_target_exp_found_in_chain(self, expression_chain):
+        for i in expression_chain:
+            if i in self.str_target_class_expression_to_label_id:
+                yield self.target_class_expressions[self.str_target_class_expression_to_label_id[i]]
 
-    def train(self):
-        self.model.train()
+    # Maybe Outdated
+    def single_dl_exp_learning(self, set_str_pos, set_str_neg, n):
 
-    def eval(self):
-        self.model.eval()
+        _, sort_idxs = torch.sort(
+            self.forward(xpos=torch.LongTensor([[self.instance_idx_mapping[i] for i in set_str_pos]]),
+                         xneg=torch.LongTensor([[self.instance_idx_mapping[i] for i in set_str_neg]])), dim=1,
+            descending=True)
+        sort_idxs = sort_idxs.cpu().numpy()[0]
+        results = ExpressionQueue()
+        for idx_target in sort_idxs[:100]:
+            expression = self.target_class_expressions[idx_target]
+            str_instances = {self.inverse_instance_idx_mapping[_] for _ in expression.idx_individuals}
 
-    def to(self, device):
-        self.model.to(device)
+            # True positive and True Negative should be as large as possible
+            tp = len(set_str_pos.intersection(str_instances))
+            tn = len(set_str_neg.difference(str_instances))
+            # False Negative and False Positive should be as less as possible
+            fn = len(set_str_pos.difference(str_instances))
+            fp = len(set_str_neg.intersection(str_instances))
 
-    def state_dict(self):
-        return self.model.state_dict()
+            # fully coverage score and as small as possible
+            s = (tp + tn) / (tp + tn + fp + fn)
 
-    def parameters(self):
-        return self.model.parameters()
-
-    def embeddings_to_numpy(self):
-        return self.model.embeddings.weight.data.detach().numpy()
+            # Sort expression with their negative coverage of intersection of E^- and Target exp
+            results.put(s, expression, str_instances)
+        return results.get_top(n)
