@@ -39,11 +39,10 @@ def report_model_results(results, name):
 def run(args):
     path_knowledge_base = args.path_knowledge_base
     path_dl_learner = args.path_dl_learner
-    path_dl_learner = None
     path_of_json_learning_problems = args.path_of_json_learning_problems
-    print('Model loading')
+    print('Loading Nero...')
     ncel_model, loading_time_to_add = load_nero(args)
-    print(f'Model loaded:{loading_time_to_add}')
+    print(f'Nero is loaded:{loading_time_to_add}')
 
     lp = dict()
     with open(path_of_json_learning_problems, 'r') as f:
@@ -57,18 +56,32 @@ def run(args):
         celoe = DLLearnerBinder(binary_path=path_dl_learner, kb_path=path_knowledge_base, model='celoe')
         eltl = DLLearnerBinder(binary_path=path_dl_learner, kb_path=path_knowledge_base, model='eltl')
     # {'Prediction': 'Sister ⊔ (Female ⊓ (¬Granddaughter))', 'Accuracy': 0.7927, 'F-measure': 0.8283, 'NumClassTested': 3906, 'Runtime': 6.361}
-    print('Iterating over learning problems')
+    counter = 1
+    print(f'Iterating over {len(lp["problems"])} learning problems')
     for target_str_name, v in lp['problems'].items():
+        print('##' * 10,end=' ')
+        print(f'{counter}. Class Expression Learning Problem',end=' ')
+        print('##' * 10)
+
+        print('Nero learning..')
         report = ncel_model.fit(str_pos=v['positive_examples'], str_neg=v['negative_examples'],
                                 topK=args.topK,
-                                use_search=args.use_search, kb_path=args.path_knowledge_base)
+                                use_search=args.use_search)
+        print(f'Nero: Prediction: {report["Prediction"]}\t F1-score: {report["F-measure"]:.3f}\t Num. explored Expressions: {report["NumClassTested"]}')
         # OUR MODEL
         nero_results.append(report)
         if path_dl_learner:
-            celoe_results.append(celoe.fit(pos=v['positive_examples'], neg=v['negative_examples'],
-                                           max_runtime=args.max_runtime_dl_learner).best_hypothesis())
-            eltl_results.append(eltl.fit(pos=v['positive_examples'], neg=v['negative_examples'],
-                                         max_runtime=args.max_runtime_dl_learner).best_hypothesis())
+            print('CELOE learning..')
+            celoe_report = celoe.fit(pos=v['positive_examples'], neg=v['negative_examples'],
+                                     max_runtime=args.max_runtime_dl_learner).best_hypothesis()
+            celoe_results.append(celoe_report)
+            print(f'CELOE: Prediction: {celoe_report["Prediction"]}\t F1-score:{celoe_report["F-measure"]:.3f}\t Num. explored Expressions: {celoe_report["NumClassTested"]}')
+            print('ELTL learning..')
+            eltl_report = eltl.fit(pos=v['positive_examples'], neg=v['negative_examples'],
+                                   max_runtime=args.max_runtime_dl_learner).best_hypothesis()
+            eltl_results.append(eltl_report)
+            print(f'ELTL: Prediction: {eltl_report["Prediction"]}\t F1-score:{eltl_report["F-measure"]:.3f}\t Num. explored Expressions: not reported.')
+        counter += 1
     # Also consider preprocessing time for Nero
     report['Runtime'] += loading_time_to_add
     report_model_results(nero_results, name='NERO')
@@ -81,27 +94,27 @@ if __name__ == '__main__':
     parser = ArgumentParser()
     # Path of an experiment folder
     parser.add_argument("--path_of_experiment_folder",
-                        # default='Experiments/Nero2022-01-08 10:27:32.685820',
-                        default='Best/NeroCarcinogenesis',
+                        default='Best/NeroFamily',
+                        # default='Best/NeroCarcinogenesis',
                         )
     parser.add_argument("--path_knowledge_base",
-                        #default='KGs/Family/Family.owl',
-                        default='KGs/Carcinogenesis/Carcinogenesis.owl'
+                        default='KGs/Family/Family.owl',
+                        # default='KGs/Carcinogenesis/Carcinogenesis.owl'
                         )
     parser.add_argument("--path_of_json_learning_problems",
-                        #default='LPs/Family/lp_dl_learner.json'
-                        default='LPs/Carcinogenesis/lp_dl_learner.json'
+                        default='LPs/Family/lp_dl_learner.json'
+                        # default='LPs/Carcinogenesis/lp_dl_learner.json'
                         )
     # Inference Related
     parser.add_argument("--topK", type=int, default=100,
                         help='Test the highest topK target expressions')
     parser.add_argument("--use_multiprocessing_at_parsing", type=int,
-                        default=0, help='1 or 0')
+                        default=1, help='1 or 0')
     parser.add_argument("--path_dl_learner", type=str,
                         default=None
                         # default=os.getcwd() + '/dllearner-1.4.0/'
                         )
     parser.add_argument("--max_runtime_dl_learner", type=int, default=10)
-    parser.add_argument('--use_search', default='SmartInit', help='None,SmartInit')
+    parser.add_argument('--use_search', default='None', help='None,SmartInit')
 
     run(parser.parse_args())

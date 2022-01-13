@@ -21,108 +21,141 @@ class NERO:
         self.quality_func = quality_func
         self.instance_idx_mapping = instance_idx_mapping
         self.str_all_individuals = set(self.instance_idx_mapping.keys())
-        # self.inverse_instance_idx_mapping = dict(
-        #    zip(self.instance_idx_mapping.values(), self.instance_idx_mapping.keys()))
-
         # expression ordered by id.
         self.target_class_expressions = target_class_expressions
         self.max_top_k = len(self.target_class_expressions)
 
         self.retrieve_counter = 0
         self.target_retrieval_data_frame = target_retrieval_data_frame
-        self.dummy=kb_path
+        self.apply_search = True if kb_path else False
         if kb_path:
+            self.expression = dict()
             # (1) Read atomic expressions
-            self.str_to_atomic_exp = self.extract_nc(
+            self.str_to_atomic_exp = self.extract_atomic_expressions(
                 self.target_class_expressions[self.target_class_expressions['length'] == 1])
-            # (2) Read negated atomic expressions
-            self.neg_nc = self.negate_nc(self.str_to_atomic_exp.values(), self.str_all_individuals)
-            # (3) Read universal quantifiers
+            # (1.1) Store (1)
+            self.expression.update(self.str_to_atomic_exp)
+            # (2) Read negated expressions
+            self.str_to_neg_atomic_exp = self.extract_neg_nc(
+                self.target_class_expressions[self.target_class_expressions['length'] == 2],
+                atomic_expressions=self.str_to_atomic_exp.values(),
+                all_individuals=self.str_all_individuals,
+                lookup=self.expression)
+            # (3) Store (2)
+            self.expression.update(self.str_to_neg_atomic_exp)
+            assert len(self.str_to_neg_atomic_exp) >= len(self.str_to_atomic_exp)
+            # (4) Read universal quantifiers
             self.str_to_universal_quantifiers = self.extract_quantifiers(
                 self.target_class_expressions[
                     self.target_class_expressions['type'] == 'universal_quantifier_expression'],
                 UniversalQuantifierExpression, self.str_to_atomic_exp)
-            # (3) Read existential quantifiers
+            # (5) Store (3)
+            self.expression.update(self.str_to_universal_quantifiers)
+
+            # (6) Read existential quantifiers
             self.str_to_existential_quantifiers = self.extract_quantifiers(
                 self.target_class_expressions[
                     self.target_class_expressions['type'] == 'existantial_quantifier_expression'],
                 ExistentialQuantifierExpression, self.str_to_atomic_exp)
-            # (4) Easy access
-            self.expression = {**self.str_to_atomic_exp, **self.neg_nc, **self.str_to_existential_quantifiers,
-                               **self.str_to_universal_quantifiers}
+            self.expression.update(self.str_to_existential_quantifiers)
+
             # (5) Create hierarchies
             self.str_to_sh_down, self.str_to_sh_up = self.construct_subsumption_hierarchy()
 
             # (6) Create leaf atomic concepts
             self.set_of_least_general_atomic_expressions = {self.expression[k] for k, v in self.str_to_sh_down.items()
                                                             if len(v) == 0}
-            # (7) Refinement of rho(⊤)
-            self.top_refinements = set()
-            self.top_refinements.update({i for i in self.str_to_sh_down['⊤']})
-            # rho(⊤) contains all negated leaf nodes
-            self.top_refinements.update(
-                {self.expression['¬' + k] for k, v in self.str_to_sh_down.items() if len(v) == 0})
             self.set_of_most_general_universal_quantifiers = set()
             self.set_of_most_general_existential_quantifiers = set()
-            for _, exp1 in self.str_to_universal_quantifiers.items():
-                filler_exp1 = exp1.filler
-                # If a filler is bottom, ignore it
-                if filler_exp1 == '⊥':
-                    continue
-                # If filler is a T, add it.
-                if filler_exp1 == '⊤':
-                    self.set_of_most_general_universal_quantifiers.add(exp1)
-                    continue
-                # if filler is a leaf exp, ignore it
-                if filler_exp1 in self.set_of_least_general_atomic_expressions:
-                    continue
-
-                if isinstance(filler_exp1, str):
-                    if filler_exp1 in self.str_to_sh_up:
-                        for x in self.str_to_sh_up[filler_exp1]:
-                            n = exp1.name.split('.')[0]
-                            new_name = n + '.' + x.name
-                            if new_name in self.expression:
-                                self.set_of_most_general_universal_quantifiers.add(self.expression[new_name])
-                else:
-                    if filler_exp1.name in self.str_to_sh_up:
-                        for x in self.str_to_sh_up[filler_exp1.name]:
-                            n = exp1.name.split('.')[0]
-                            new_name = n + '.' + x.name
-                            if new_name in self.expression:
-                                self.set_of_most_general_universal_quantifiers.add(self.expression[new_name])
-
-            for _, exp1 in self.str_to_existential_quantifiers.items():
-                filler_exp1 = exp1.filler
-                # If a filler is bottom, ignore it
-                if filler_exp1 == '⊥':
-                    continue
-                # If filler is a T, add it.
-                if filler_exp1 == '⊤':
-                    self.set_of_most_general_universal_quantifiers.add(exp1)
-                    continue
-                # if filler is a leaf exp, ignore it
-                if filler_exp1 in self.set_of_least_general_atomic_expressions:
-                    continue
-                if isinstance(filler_exp1, str):
-                    if filler_exp1 in self.str_to_sh_up:
-                        for x in self.str_to_sh_up[filler_exp1]:
-                            n = exp1.name.split('.')[0]
-                            new_name = n + '.' + x.name
-                            if new_name in self.expression:
-                                self.set_of_most_general_existential_quantifiers.add(self.expression[new_name])
-                else:
-                    if filler_exp1.name in self.str_to_sh_up:
-                        for x in self.str_to_sh_up[filler_exp1.name]:
-                            n = exp1.name.split('.')[0]
-                            new_name = n + '.' + x.name
-                            if new_name in self.expression:
-                                self.set_of_most_general_existential_quantifiers.add(self.expression[new_name])
-
-            self.top_refinements.update(self.set_of_most_general_universal_quantifiers)
-            self.top_refinements.update(self.set_of_most_general_existential_quantifiers)
+            # (7) Refinement of rho(⊤)
+            self.top_refinements = self.construct_refinement_of_top()
+            self.bottom_refinements = self.construct_refinement_of_bottom()
         else:
             self.expression = dict()
+
+    def construct_refinement_of_bottom(self):
+        result = set()
+        # Leaf atomic expressions.
+        result.update(self.set_of_least_general_atomic_expressions)
+        for i in self.set_of_least_general_atomic_expressions:
+            i_name = i.name
+            for k, v in self.str_to_universal_quantifiers.items():
+                v_filler_name = v.filler if isinstance(v.filler, str) else v.filler.name
+                if i_name == v_filler_name:
+                    result.add(v)
+            for k, v in self.str_to_existential_quantifiers.items():
+                v_filler_name = v.filler if isinstance(v.filler, str) else v.filler.name
+                if i_name == v_filler_name:
+                    result.add(v)
+        return result
+
+    def construct_refinement_of_top(self):
+        result = set()
+        result.update({i for i in self.str_to_sh_down['⊤']})
+        # rho(⊤) contains all negated leaf nodes
+        # result.update({self.expression['¬' + k] for k, v in self.str_to_sh_down.items() if len(v) == 0})
+        result.update({self.expression['¬' + i.name] for i in self.set_of_least_general_atomic_expressions})
+
+        for _, exp1 in self.str_to_universal_quantifiers.items():
+            filler_exp1 = exp1.filler
+            # If a filler is bottom, ignore it
+            if filler_exp1 == '⊥':
+                continue
+            # If filler is a T, add it.
+            if filler_exp1 == '⊤':
+                self.set_of_most_general_universal_quantifiers.add(exp1)
+                continue
+            # if filler is a leaf exp, ignore it
+            if filler_exp1 in self.set_of_least_general_atomic_expressions:
+                continue
+
+            if isinstance(filler_exp1, str):
+                if filler_exp1 in self.str_to_sh_up:
+                    for x in self.str_to_sh_up[filler_exp1]:
+                        n = exp1.name.split('.')[0]
+                        new_name = n + '.' + x.name
+                        if new_name in self.expression:
+                            self.set_of_most_general_universal_quantifiers.add(self.expression[new_name])
+            else:
+                if filler_exp1.name in self.str_to_sh_up:
+                    for x in self.str_to_sh_up[filler_exp1.name]:
+                        n = exp1.name.split('.')[0]
+                        new_name = n + '.' + x.name
+                        if new_name in self.expression:
+                            self.set_of_most_general_universal_quantifiers.add(self.expression[new_name])
+
+        for _, exp1 in self.str_to_existential_quantifiers.items():
+            filler_exp1 = exp1.filler
+            # If a filler is bottom, ignore it
+            if filler_exp1 == '⊥':
+                continue
+            # If filler is a T, add it.
+            if filler_exp1 == '⊤':
+                self.set_of_most_general_universal_quantifiers.add(exp1)
+                continue
+            # if filler is a leaf exp, ignore it
+            if filler_exp1 in self.set_of_least_general_atomic_expressions:
+                continue
+            if isinstance(filler_exp1, str):
+                if filler_exp1 in self.str_to_sh_up:
+                    for x in self.str_to_sh_up[filler_exp1]:
+                        n = exp1.name.split('.')[0]
+                        new_name = n + '.' + x.name
+                        if new_name in self.expression:
+                            self.set_of_most_general_existential_quantifiers.add(self.expression[new_name])
+            else:
+                if filler_exp1.name in self.str_to_sh_up:
+                    for x in self.str_to_sh_up[filler_exp1.name]:
+                        n = exp1.name.split('.')[0]
+                        if isinstance(x, str):
+                            continue
+                        new_name = n + '.' + x.name
+                        if new_name in self.expression:
+                            self.set_of_most_general_existential_quantifiers.add(self.expression[new_name])
+
+        result.update(self.set_of_most_general_universal_quantifiers)
+        result.update(self.set_of_most_general_existential_quantifiers)
+        return result
 
     def construct_subsumption_hierarchy(self) -> Tuple[Dict, Dict]:
         """ Construct Direct subsumption up and down hierarchy """
@@ -156,7 +189,7 @@ class NERO:
         return res
 
     @staticmethod
-    def extract_nc(df: pd.DataFrame):
+    def extract_atomic_expressions(df: pd.DataFrame):
         """ Deserialize atomic expressions from a pandas DataFrame"""
         res = dict()
         for i, d in df.iterrows():
@@ -169,12 +202,25 @@ class NERO:
         return res
 
     @staticmethod
-    def negate_nc(x: Set, N_I: Set):
-        return {'¬' + i.name: ComplementOfAtomicExpression(
-            name='¬' + i.name,
-            atomic_expression=i,
-            str_individuals=N_I.difference(i.str_individuals),
-            expression_chain=i.expression_chain) for i in x}
+    def extract_neg_nc(df: pd.DataFrame, atomic_expressions, all_individuals, lookup):
+        """ Deserialize atomic expressions from a pandas DataFrame"""
+        res = dict()
+        for i, d in df.iterrows():
+            atomic_name = d['atomic_expression'].split('|')[1].strip()
+            atomic_expression = lookup[atomic_name] if atomic_name in lookup else atomic_name
+            new_obj = ComplementOfAtomicExpression(name=d['name'],
+                                                   atomic_expression=atomic_expression,
+                                                   str_individuals=eval(d['str_individuals']),
+                                                   expression_chain=eval(d['expression_chain']),
+                                                   idx_individuals=eval(d['idx_individuals']))
+            res[new_obj.name] = new_obj
+        for i in atomic_expressions:
+            new_obk = ComplementOfAtomicExpression(name='¬' + i.name, atomic_expression=i,
+                                                   str_individuals=all_individuals.difference(i.str_individuals),
+                                                   expression_chain=i.expression_chain)
+
+            res[new_obk.name] = new_obk
+        return res
 
     @staticmethod
     def extract_quantifiers(df: pd.DataFrame, cls, atomic_to_exp):
@@ -195,9 +241,12 @@ class NERO:
         """ An ALC expressions in string format to an instance of ClassExpression """
         if x in self.expression:
             return self.expression[x]
+
         # Check in the pandas frame
         row = self.target_class_expressions[self.target_class_expressions['name'] == x]
-        return self.pandas_series_to_exp(row)
+        if len(row) > 0:
+            return self.pandas_series_to_exp(row)
+        return x
 
     def call_quality_function(self, *, set_str_individual: Set[str], set_str_pos: Set[str],
                               set_str_neg: Set[str]) -> float:
@@ -317,43 +366,36 @@ class NERO:
             print(type_)
             print(d)
             raise ValueError
-        #self.expression[new_obj.name] = new_obj
+        # self.expression[new_obj.name] = new_obj
         return new_obj
 
-    def pandas_series_to_exp(self, d: pd.Series):
+    def pandas_series_to_exp(self, d: pd.DataFrame):
         """ Construct an expression from pandas dataframe"""
-        name = d['name'].item()
-        #if name in self.expression:
-        #    return self.expression[name]
-        new_exp = self.generate_exp_from_pandas_series(d)
-        return new_exp
+        try:
+            assert isinstance(d, pd.DataFrame)
+            assert len(d) > 0
+        except AssertionError:
+            print(d)
+            raise AssertionError
+        return self.generate_exp_from_pandas_series(d)
 
     def select_target_expression(self, idx: int):
         # (5) Look up target class expression
-        row = self.target_class_expressions[self.target_class_expressions['label_id'] == idx]
-        if len(self.expression) == 0:
+        row = self.target_class_expressions[self.target_class_expressions['label_id'] == idx]  # .squeeze()
+        if not self.apply_search:
             # Each target/label is an instance of TargetClassExpression
             return TargetClassExpression(label_id=row['label_id'].item(),
                                          name=row['name'].item(),
                                          # type=type_,
                                          length=int(row['length'].item()),
-                                         expression_chain=eval(row['expression_chain'].item()),
+                                         # expression_chain=eval(row['expression_chain'].item()),
                                          str_individuals=eval(row['str_individuals'].item()),
-                                         idx_individuals=eval(row['idx_individuals'].item()))
+                                         # idx_individuals=eval(row['idx_individuals'].item())
+                                         )
 
         return self.pandas_series_to_exp(row)
 
-        """
-        return TargetClassExpression(label_id=row['label_id'].item(),
-                                     name=row['name'].item(),
-                                     type=row['type'].item(),
-                                     length=int(row['length'].item()),
-                                     expression_chain=eval(row['expression_chain'].item()),
-                                     str_individuals=eval(row['str_individuals'].item()),
-                                     idx_individuals=eval(row['idx_individuals'].item()))
-        """
-
-    def fit(self, str_pos: [str], str_neg: [str], topK: int = None, use_search=None, kb_path=None) -> Dict:
+    def fit(self, str_pos: [str], str_neg: [str], topK: int = None, use_search=None) -> Dict:
         """
         Given set of positive and negative indviduals, fit returns
         {'Prediction': best_pred.name,
@@ -401,7 +443,10 @@ class NERO:
                 top_prediction_queue = self.search_with_init(top_prediction_queue, set_pos, set_neg)
                 best_constructed_expression = top_prediction_queue.get()
                 if best_constructed_expression > best_pred:
+                    # print('Best Pred within d expressions:', best_pred)
+                    # print('Best Pred after search:', best_constructed_expression)
                     best_pred = best_constructed_expression
+
             elif use_search == 'None' or use_search is None:
                 assert len(top_prediction_queue) > 0
                 best_pred = top_prediction_queue.get()
@@ -414,13 +459,13 @@ class NERO:
         f1, name, str_instances = best_pred.quality, best_pred.name, best_pred.str_individuals
         report = {'Prediction': best_pred.name,
                   'Instances': str_instances,
-                  'F-measure': f1,
+                  'F-measure': round(f1, 3),
                   'NumClassTested': self.retrieve_counter,
-                  'Runtime': time.time() - start_time,
+                  'Runtime': round(time.time() - start_time, 3),
                   }
         return report
 
-    def downward_refine(self, expression):
+    def downward_refine(self, expression, length=None):
         """
         top-down/downward refinement operator
         \forall s \in \StateSpace : \rho(s) \subseteq \{ s^i \in \StateSpace \;|\; s^i \preceq s \}.
@@ -431,28 +476,25 @@ class NERO:
         if isinstance(expression, str):
             # (1) Length constraint refinement of Top .
             if expression == '⊤':
-                return self.top_refinements
+                return {}  # self.top_refinements
             # Bottom can not be refined.
             # if expression == '⊥':
             return {}
         x_type = expression.type
         refinements = set()
         if x_type == 'union_expression':
-            # Given C \equiv A \sqcup B, =>
-            # (1) {\rho(A) \sqcup B} \cup
-            # (2) {A \sqcup \rho(B)} \cup
-            # (3) {A \sqcup B \sqcap T} \in \rho(C)
+            # C \equiv A \sqcup B : (1) {\rho(A)\sqcup B}\cup (2) {A\sqcup\rho(B)} \cup (3) {A\sqcupB \sqcap T}
             A, B = expression.concepts
-            # (1)
+            # (1) Union of refined operand with other operand.
             for rho_A in self.downward_refine(A):
                 refinements.add(rho_A + B)
             # (2)
             for rho_B in self.downward_refine(B):
                 refinements.add(rho_B + A)
             # (3)
-            # for i in self.top_refinements:
-            #    if not i.str_individuals.isdisjoint(expression.str_individuals):
-            #        refinements.add(i * expression)
+            for i in self.top_refinements:
+                if not i.str_individuals.isdisjoint(expression.str_individuals):
+                    refinements.add(i * expression)
         elif x_type == 'intersection_expression':
             # Given C \equiv A \sqcap B, =>
             # (1) {\rho(A) \sqcap B} \cup
@@ -482,9 +524,9 @@ class NERO:
                     assert i == 'T'
                 else:
                     refinements.add(self.expression['¬' + i.name])
-            # for i in self.top_refinements:
-            #    if not i.str_individuals.isdisjoint(expression.str_individuals):
-            #        refinements.add(i * expression)
+            for i in self.top_refinements:
+                if not i.str_individuals.isdisjoint(expression.str_individuals):
+                    refinements.add(i * expression)
         elif x_type == 'existantial_quantifier_expression':
             # C \equiv ∃ r.A (e.g. ∃ hasSibling.Parent)
             # (1) {∃ r.B | B \in \rho(A)} \cup
@@ -495,85 +537,52 @@ class NERO:
                 if n in self.expression:
                     refinements.add(self.expression[n])
                 else:
+                    # ∃ hasSibling.¬Daughter ⊓ Parent
                     continue
-                    """
-                    try:
-                        assert i.type in ['intersection_expression', 'union_expression']
-                    except:
-                        print(expression)
-                        print(n)
-                        print(i)
-                        print(self.expression[n])
-                        exit(1)
-
-                    for x in i.concepts:
-                        if x.name == expression.filler.name:
-                            continue
-                        if x.type == 'atomic_expression':
-                            n = expression.name.split('.')[0] + '.' + x.name
-                            if n in self.expression:
-                                refinements.add(self.expression[n])
-
-                        elif x.type == 'negated_expression':
-                            str_not_expression = x.name[1:]
-                            store = set()
-                            for up_str_not_expression in self.str_to_sh_down[expression.filler.name]:
-                                if str_not_expression == up_str_not_expression.name:
-                                    continue
-                                n = expression.name.split('.')[0] + '.' + up_str_not_expression.name
-                                if n in self.expression:
-                                    store.add(self.expression[n])
-                            import itertools
-                            refinements.update(itertools.accumulate(store))
-
-                        elif x.type in ['universal_quantifier_expression', 'existantial_quantifier_expression']:
-                            if x.name != expression.name:
-                                a = x * expression
-                                self.expression[a.name] = a
-                                refinements.add(self.expression[a.name])
-                        else:
-                            raise ValueError
-                    """
             # (2)
-            # for i in self.top_refinements:
-            #    if not i.str_individuals.isdisjoint(expression.str_individuals):
-            #        refinements.add(i * expression)
+            for i in self.top_refinements:
+                if not i.str_individuals.isdisjoint(expression.str_individuals):
+                    refinements.add(i * expression)
+
+
         elif x_type == 'universal_quantifier_expression':
             # C \equiv ∀ r.A (e.g. ∀ married.Brother)
-            # (1) {∀ r.\rho(A)}
-            # \cup
+            # (1) {∀ r.\rho(A)} \cup
             if not isinstance(expression.filler, str):
                 for i in self.downward_refine(expression.filler):
                     n = expression.name.split('.')[0] + '.' + i.name
                     if n in self.expression:
                         refinements.add(self.expression[n])
-            # for i in self.top_refinements:
-            #    if not i.str_individuals.isdisjoint(expression.str_individuals):
-            #        refinements.add(i * expression)
-
+            for i in self.top_refinements:
+                if not i.str_individuals.isdisjoint(expression.str_individuals):
+                    refinements.add(i * expression)
         else:
             raise KeyError('Error in expression type')
+
+        if length:
+            return {i for i in refinements if i.length <= length}
         return refinements
 
     def upward_refine(self, expression):
         """ \forall s \in \StateSpace : \rho(s) \subseteq \{ s^i \in \StateSpace \;|\; s \preceq  s^i \} """
         if isinstance(expression, str):
             if expression == '⊥':
-                return self.set_of_least_general_atomic_expressions
+                return self.bottom_refinements
             return {}
 
         x_type = expression.type
         refinements = set()
 
         if x_type == 'union_expression':
-
             A, B = expression.concepts
             refinements.add(A)
             refinements.add(B)
             for rho_A in self.upward_refine(A):
-                refinements.add(rho_A)
+                refinements.add(rho_A + B)
             for rho_B in self.upward_refine(B):
-                refinements.add(rho_B)
+                refinements.add(rho_B + A)
+            for i in self.set_of_least_general_atomic_expressions:
+                refinements.add(i + expression)
         elif x_type == 'intersection_expression':
             A, B = expression.concepts
             refinements.add(A)
@@ -582,10 +591,15 @@ class NERO:
                 refinements.add(rho_A + B)
             for rho_B in self.upward_refine(B):
                 refinements.add(rho_B + A)
+            for i in self.set_of_least_general_atomic_expressions:
+                refinements.add(i + expression)
+
         elif x_type == 'atomic_expression':
             if expression.name in self.str_to_sh_up:
                 for i in self.str_to_sh_up[expression.name]:
                     refinements.add(i)
+            for i in self.set_of_least_general_atomic_expressions:
+                refinements.add(i + expression)
         elif x_type == 'negated_expression':
             # ¬Son ?
             str_not_expression = expression.name[1:]
@@ -593,38 +607,65 @@ class NERO:
                 name = '¬' + i.name
                 if name in self.expression:
                     refinements.add(self.expression['¬' + i.name])
+            for i in self.set_of_least_general_atomic_expressions:
+                refinements.add(i + expression)
         elif x_type == 'existantial_quantifier_expression':
             for i in self.upward_refine(expression.filler):
                 n = expression.name.split('.')[0] + '.' + i.name
                 if n in self.expression:
                     refinements.add(self.expression[n])
+            for i in self.set_of_least_general_atomic_expressions:
+                refinements.add(i + expression)
         elif x_type == 'universal_quantifier_expression':
             for i in self.upward_refine(expression.filler):
                 n = expression.name.split('.')[0] + '.' + i.name
                 if n in self.expression:
                     refinements.add(self.expression[n])
+            for i in self.set_of_least_general_atomic_expressions:
+                refinements.add(i + expression)
         else:
             raise KeyError('Error in expression type')
         return refinements
 
     def search_with_init(self, top_prediction_queue, set_pos, set_neg):
         """ Standard search with smart initialization """
+        # (1) Initialize final predictions to be returned as search tree/priority queue.
+        top_predictions = SearchTree()
+        top_predictions.extend_queue(top_prediction_queue)
+        refinements_of_top_predictions = SearchTree()
 
-        search_tree = SearchTree()
-        # (2) Iterate over advantages states
-        while len(top_prediction_queue) > 0:
+        n = len(top_prediction_queue)
+        exploration_counter = n
+        # (2) Iterate over advantages states.
+        while len(top_prediction_queue) > (n * .99):  # explore only 1  percent
             # (2.1) Get top ranked Description Logic Expressions: C.
             c = top_prediction_queue.get()
-            # (2.2) Compute heuristic val of  C.
-            search_tree.put(c, key=-c.quality)
-            for a in self.downward_refine(c).union(self.upward_refine(c)):
-                if a not in search_tree or a not in top_prediction_queue:
+            # (2.2) Refine \rho(C).
+            for a in self.downward_refine(c, length=c.length + 3):  # .union(self.upward_refine(c)):
+                if a in refinements_of_top_predictions or a in top_predictions:
+                    """ Already seen"""
+                    continue
+                else:
                     a.quality = self.call_quality_function(
                         set_str_individual=a.str_individuals,
                         set_str_pos=set_pos,
                         set_str_neg=set_neg)
-                    search_tree.put(a, key=-a.quality)
-        return search_tree
+                    # (2.3) Add refinements.
+                    exploration_counter -= 1
+                    refinements_of_top_predictions.put(a, key=-a.quality)
+                    top_predictions.put(a, key=-a.quality)
+                    if exploration_counter == 0:
+                        break
+            if exploration_counter == 0:
+                break
+
+        # Do something with refinements_of_top_predictions if necessary
+        if False:
+            while len(refinements_of_top_predictions) > 0:
+                c = refinements_of_top_predictions.get()
+                print(c)
+
+        return top_predictions
 
     def __str__(self):
         return f'NERO with {self.model.name}'

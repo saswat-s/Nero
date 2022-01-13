@@ -12,6 +12,8 @@ from random import randint
 from argparse import ArgumentParser
 import random
 
+from core.loaders import *
+
 
 def load_target_class_expressions_and_instance_idx_mapping(args):
     """
@@ -21,6 +23,23 @@ def load_target_class_expressions_and_instance_idx_mapping(args):
     """
     # target_class_expressions Must be empty and must be filled in an exactorder
     target_class_expressions = []
+    ncel_model, loading_time_to_add = load_nero(args)
+
+    exit(1)
+    load_nero()
+    df = ddf.read_csv(args['path_of_experiment_folder'] + '/target_class_expressions.csv', dtype={'label_id': 'int',
+                                                                                                  'name': 'object',
+                                                                                                  'str_individuals': 'object',
+                                                                                                  'idx_individuals': 'object',
+                                                                                                  'atomic_expression': 'object',
+                                                                                                  'concepts': 'object',
+                                                                                                  'filler': 'object',
+                                                                                                  'role': 'object',
+                                                                                                  })
+    df = df.compute(scheduler='processes').set_index('Unnamed: 0')
+
+    print(df.head())
+
     with open(args['path_of_experiments'] + '/target_class_expressions.json', 'r') as f:
         for k, v in json.load(f).items():
             k: str  # k denotes k.th label of target expression, json loading type conversion from int to str appreantly
@@ -87,26 +106,26 @@ def load_ncel(args: Dict) -> NERO:
     return model
 
 
-def launch_service(ncel_model):
+def launch_service(nero):
     def predict(positive_examples, negative_examples, size_of_examples, random_examples: bool):
         if random_examples:
             # Either sample from here self.instance_idx_mapping
             # or sample from targets
-            pos_str = random.sample(list(ncel_model.str_individuals_to_idx.keys()), int(size_of_examples))
-            neg_str = random.sample(list(ncel_model.str_individuals_to_idx.keys()), int(size_of_examples))
+            pos_str = random.sample(list(nero.instance_idx_mapping.keys()), int(size_of_examples))
+            neg_str = random.sample(list(nero.instance_idx_mapping.keys()), int(size_of_examples))
         else:
             pos_str = positive_examples.split(",")
             neg_str = negative_examples.split(",")
 
         with torch.no_grad():
-            report = ncel_model.fit(str_pos=pos_str, str_neg=neg_str, topK=100)
+            report = nero.fit(str_pos=pos_str, str_neg=neg_str, topK=100)
         if len(pos_str) < 20:
             s = f'E^+:{",".join(pos_str)}\nE^-:{",".join(neg_str)}\n'
         else:
             s = f'|E^+|:{len(pos_str)}\n|E^-|:{len(neg_str)}\n'
 
         report.pop('Instances')
-        return s,pd.DataFrame([report])
+        return s, pd.DataFrame([report])
 
     gr.Interface(
         fn=predict,
@@ -114,28 +133,27 @@ def launch_service(ncel_model):
                 gr.inputs.Textbox(lines=5, placeholder=None, label='Negative Examples'),
                 gr.inputs.Slider(minimum=1, maximum=100),
                 "checkbox"],
-        outputs=[gr.outputs.Textbox(label='Learning Problem'),gr.outputs.Dataframe(label='Predictions')],
+        outputs=[gr.outputs.Textbox(label='Learning Problem'), gr.outputs.Dataframe(label='Predictions')],
         title='Rapid Induction of Description Logic Expressions via Nero',
         description='Click Random Examples & Submit.').launch()
 
 
-def run(settings):
-    with open(settings['path_of_experiments'] + '/settings.json', 'r') as f:
-        settings.update(json.load(f))
-
-    # (2) Load the Pytorch Module
-    ncel_model = load_ncel(settings)
-
+def run(args):
+    print('Loading Nero...')
+    ncel_model, loading_time_to_add = load_nero(args)
+    print(f'Nero is loaded:{loading_time_to_add}')
     launch_service(ncel_model)
 
 
 if __name__ == '__main__':
     parser = ArgumentParser()
     # General
-    parser.add_argument("--path_of_experiments", type=str, default='ExperimentsLarge/NeroFamily')
-    # Inference Related
-    parser.add_argument("--topK", type=int, default=10_0000,
-                        help='Test the highest topK target expressions')
+    parser.add_argument("--path_of_experiment_folder", type=str, default='Best/NeroFamily')
 
-    settings = vars(parser.parse_args())
-    run(settings)
+    # Inference Related
+    parser.add_argument("--topK", type=int, default=100,
+                        help='Test the highest topK target expressions')
+    parser.add_argument("--use_multiprocessing_at_parsing", type=int,
+                        default=0, help='1 or 0')
+    parser.add_argument('--use_search', default='None', help='None,SmartInit')
+    run(parser.parse_args())

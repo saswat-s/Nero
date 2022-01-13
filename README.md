@@ -41,7 +41,7 @@ sh train.sh
 ```
 For each experiment, the following log info is stored.
 ```sh
-2021-11-29 10:04:05,408 - Experimenter - INFO - Knowledge Base being Initialized /home/demir/Desktop/Softwares/DeepTunnellingForRefinementOperators/KGs/Lymphography/lymphography.owl
+2021-11-29 10:04:05,408 - Experimenter - INFO - Knowledge Base being Initialized /../KGs/Lymphography/lymphography.owl
 2021-11-29 10:04:05,461 - Experimenter - INFO - Number of individuals: 148
 2021-11-29 10:04:05,461 - Experimenter - INFO - Number of named classes / expressions: 49
 2021-11-29 10:04:05,461 - Experimenter - INFO - Number of properties / roles : 0
@@ -55,15 +55,34 @@ For each experiment, the following log info is stored.
 ```
 
 # Testing
-A pretrained model stored in an experiment folder (2021-11-29 11:46:44.726916) can be easily tested on learning problems.
-```sh
-python reproduce_experiments.py --path_of_experiment_folder "$PWD/Experiments/2021-11-29 11:46:44.726916" --path_of_json_learning_problems "$PWD/LPs/Family/lp_dl_learner.json"
-sh test.sh
-```
-We have also provided a test script that facilitates testing a pretrained model on different datasets with different learning problems.
+We have provided a test script that facilitates testing a pretrained model on different datasets with different learning problems.
 ```sh
 sh test.sh
 ```
+Expected output: 
+```sh
+##################
+Evaluate NERO on Family benchmark dataset by using learning problems provided in DL-Learner
+##################
+Loading Nero...
+Nero is loaded:5.244850397109985
+Iterating over 18 learning problems
+#################### 1.LP ####################
+Nero learning..
+Nero: Prediction: Sister ⊔ (∃ married.Brother)   F1-score: 0.911         Num. explored Expressions: 100
+CELOE learning..
+CELOE: Prediction: Sister ⊔ (∃ married.Brother)  F1-score:0.911          Num. explored Expressions: 8038
+ELTL learning..
+ELTL: Prediction: Female         F1-score:0.804  Num. explored Expressions: not reported.
+#################### 2.LP ####################
+...
+ELTL: Prediction: Male   F1-score:0.884  Num. explored Expressions: not reported.
+NERO: F-measure:0.984+-0.039    Runtime:0.309+-1.248    NumClassTested:21.056+-37.298
+CELOE: F-measure:0.980+-0.053   Runtime:5.015+-3.720    NumClassTested:1457.333+-3270.442
+ELTL: F-measure:0.964+-0.091    Runtime:3.559+-0.616    NumClassTested:-1.000+-0.000
+Evaluation Ends
+```
+
 
 # Embeddings of Description Logic Expressions
 Here, we fit a regression model on 2D embeddings of 1-length expressions. 
@@ -72,7 +91,7 @@ Despite the information loss incurred due to PCA, embeddings of 1-length express
 # Deployment
 To ease using pre-trained model, we provide an API.
 ```sh
-python deploy_demo.py --path_of_experiments "$PWD/Experiments/2021-11-29 10:47:31.373883"
+python deploy_demo.py --path_of_experiments "$PWD/Best/NeroFamily"
 # Few seconds later, pretrained model is deployed in a local server
 Running on local URL:  http://127.0.0.1:7860/
 ```
@@ -89,11 +108,7 @@ unzip dllearner-1.4.0.zip
 dllearner-1.4.0/bin/cli dllearner-1.4.0/examples/father.conf
 ```
 
-
-
-
 ## Acknowledgement 
-We based our implementation on the open source implementation of [DRILL](https://arxiv.org/abs/2106.15373).
-
+...
 ## Contact
-For any further questions or suggestions, please contact:  ```caglar.demir@upb.de```
+...

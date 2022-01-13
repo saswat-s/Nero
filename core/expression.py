@@ -233,7 +233,7 @@ class ComplementOfAtomicExpression(ClassExpression):
         super().__init__(name=name, str_individuals=str_individuals, expression_chain=expression_chain, quality=quality,
                          owl_class=owl_class)
         self.atomic_expression = atomic_expression
-        self.length = self.atomic_expression.length + 1
+        self.length = 2
         self.type = 'negated_expression'
         self.label_id = label_id
         self.idx_individuals = idx_individuals
