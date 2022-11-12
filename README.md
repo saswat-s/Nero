@@ -1,13 +1,29 @@
 # Learning Permutation-Invariant Embeddings for Description Logic Concepts
 
+Description logic concept learning deals with learning description logic concepts from a knowledge base and input examples. 
+The goal is to learn a concept that covers all positive examples, while not covering any negative examples. 
+Here, we accelerate the learning process by NERO--permutation-invariant neural embedding model.
+![alt text](core/figures/nero.png)
+
+Given a knowledge base, positive and negative examples, NERO learns permutation-invariant embeddings for input sets of examples tailored to-
+wards predicting F1 scores of pre-selected description logic concepts. By
+ranking such concepts in descending order of predicted scores, a possible
+goal concept can be detected within few retrieval operations. 
+Importantly, top-ranked concepts can be used to start the search procedure of
+state-of-the-art symbolic models in multiple advantageous regions of a
+concept space, rather than starting in the most general concept ⊤.
+
+![alt text](core/figures/kb.png)
+
+
 # Installation
 Create a anaconda virtual environment and install dependencies.
 ```sh
-git clone https://github.com/dice-group/DeepTunnellingForRefinementOperators
-# Create anaconda virtual enviroment
+git clone https://github.com/dice-group/Nero
+# Create anaconda virtual environment
 conda env create -f environment.yml
-# Active virtual enviroment 
-conda activate deeptunnel
+# Active virtual environment 
+conda activate nero
 # Install ontolearn library
 wget https://github.com/dice-group/Ontolearn/archive/refs/tags/0.4.0.zip
 unzip 0.4.0.zip
@@ -18,10 +34,8 @@ cd ..
 ```
 # Datasets and learning problems 
 ```sh
-# Ontologies with assertions
-unzip KGs.zip
-# Learning Problems {(E^+, E^-)}
-unzip LPs.zip
+# Ontologies with assertions and # Learning Problems {(E^+, E^-)}
+unzip KGs.zip && unzip LPs.zip
 ```
 
 # Unsupervised Training
@@ -54,8 +68,6 @@ Expected output:
 ##################
 Evaluate NERO on Family benchmark dataset by using learning problems provided in DL-Learner
 ##################
-Loading Nero...
-Nero is loaded:5.244850397109985
 Iterating over 18 learning problems
 #################### 1.LP ####################
 Nero learning..
