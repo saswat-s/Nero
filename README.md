@@ -1,14 +1,4 @@
-# Permutation-Invariant Embeddings for Learning Description Logic Expressions 
-Traditional symbolic models have been successfully applied to learn Description Logic expressions from a background knowledge and examples in a provably sound and complete fashion. 
-However, these models often require to explore a large number of expressions to find an adequate one. 
-Although applying the redundancy elimination and the expression simplification rules often reduce the number of explored expressions, long runtimes incurred by the exploration still prohibit large scale applications of state-of-the-art models. 
-
-Here, we present a neural permutation-invariant embedding model (NERO) to alleviate the exploration problem. 
-NERO maps any variable-length sets of examples to a quality distribution over Description Logic expressions. 
-Hence,NERO can accurately prune inadequate numerous expressions without exploring a single expression.
-Importantly, the novel architecture of NERO allows cooperation with a state-of-the-art models in learning an adequate expression in a provably sound and complete fashion.
-NERO can be applied within state-of-the-art models to accelerate reasoning process. We theoretically showed that \approach can represent any standard quality function. 
-
+# Learning Permutation-Invariant Embeddings for Description Logic Concepts
 
 # Installation
 Create a anaconda virtual environment and install dependencies.
@@ -107,8 +97,5 @@ unzip dllearner-1.4.0.zip
 # Test the DL-learner framework
 dllearner-1.4.0/bin/cli dllearner-1.4.0/examples/father.conf
 ```
-
-## Acknowledgement 
-...
 ## Contact
-...
+For any questions or wishes, please contact:  ```caglar.demir@upb.de``` or ```caglardemir8@gmail.com```
