@@ -71,6 +71,8 @@ wget --no-check-certificate --content-disposition https://github.com/SmartDataAn
 unzip dllearner-1.4.0.zip
 # Test the DL-learner framework
 dllearner-1.4.0/bin/cli dllearner-1.4.0/examples/father.conf
+# Download Pretrained models
+# https://drive.google.com/file/d/1JzXVZuk9isEWFWkS15xoDR8ZTQrelQgi/view?usp=share_link
 # Unzip the pretrained models
 unzip Best.zip
 # Reproduce the reported results
