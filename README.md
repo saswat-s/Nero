@@ -32,7 +32,12 @@ python -c 'from setuptools import setup; setup()' develop
 python -c "import ontolearn"
 cd ..
 ```
-# Datasets and learning problems 
+# Manuel Installation
+```sh
+pip install seaborn==0.12.1
+```
+
+# Datasets and Learning Problems 
 ```sh
 # Ontologies with assertions and # Learning Problems {(E^+, E^-)}
 unzip KGs.zip && unzip LPs.zip
@@ -58,10 +63,18 @@ For each experiment, the following log info is stored.
 2021-11-29 10:04:06,090 - Experimenter - INFO - Total Runtime of the experiment:0.20418190956115723
 ```
 
-# Testing
+# Reproduce Results
 We have provided a test script that facilitates testing a pretrained model on different datasets with different learning problems.
 ```sh
-sh test.sh
+# Download DL-Learner
+wget --no-check-certificate --content-disposition https://github.com/SmartDataAnalytics/DL-Learner/releases/download/1.4.0/dllearner-1.4.0.zip
+unzip dllearner-1.4.0.zip
+# Test the DL-learner framework
+dllearner-1.4.0/bin/cli dllearner-1.4.0/examples/father.conf
+# Unzip the pretrained models
+unzip Best.zip
+# Reproduce the reported results
+sh testing.sh
 ```
 Expected output: 
 ```sh
@@ -100,14 +113,5 @@ Running on local URL:  http://127.0.0.1:7860/
 ![alt text](core/figures/deploy_1.png)
 ![alt text](core/figures/deploy_2.png)
 
-
-# Integrate DL-Learner
-```
-# Download DL-Learner
-wget --no-check-certificate --content-disposition https://github.com/SmartDataAnalytics/DL-Learner/releases/download/1.4.0/dllearner-1.4.0.zip
-unzip dllearner-1.4.0.zip
-# Test the DL-learner framework
-dllearner-1.4.0/bin/cli dllearner-1.4.0/examples/father.conf
-```
 ## Contact
 For any questions or wishes, please contact:  ```caglar.demir@upb.de``` or ```caglardemir8@gmail.com```

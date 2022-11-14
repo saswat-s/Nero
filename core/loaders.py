@@ -2,7 +2,6 @@ import torch
 from typing import Dict
 import time
 import json
-from dask import dataframe as ddf
 from .model import NERO
 from .neural_arch import DeepSet
 from .static_funcs import f_measure, ClosedWorld_ReasonerFactory
@@ -14,7 +13,8 @@ import pandas as pd
 def load_target_class_expressions_and_instance_idx_mapping(args):
     # (1) Extract Class Expressions
     # target_class_expressions = []
-    # df = pd.read_csv(args.path_of_experiment_folder + '/target_class_expressions.csv', index_col=0)
+    df = pd.read_csv(args.path_of_experiment_folder + '/target_class_expressions.csv', index_col=0)
+    """
     if args.use_multiprocessing_at_parsing == 1:
         df = ddf.read_csv(args.path_of_experiment_folder + '/target_class_expressions.csv', dtype={'label_id': 'int',
                                                                                                    'name': 'object',
@@ -28,7 +28,7 @@ def load_target_class_expressions_and_instance_idx_mapping(args):
         df = df.compute(scheduler='processes').set_index('Unnamed: 0')
     else:
         df = pd.read_csv(args.path_of_experiment_folder + '/target_class_expressions.csv', index_col=0)
-
+    """
     if args.use_search is not None:
         target_class_expressions = df  # df.filter(['label_id', 'type','name', 'str_individuals', 'idx_individuals','expression_chain','length'])
         """
