@@ -87,11 +87,8 @@ class Trainer:
                     target_class_expressions=self.learning_problems.target_class_expressions,
                     instance_idx_mapping=self.learning_problems.str_individuals_to_idx)
 
-    def training_loop(self):
-
-        # (1) Initialize the model.
-        model = self.neural_architecture_selection()
-        # (3) Initialize the training. MSE seemed to yield better results, less num of concepts explored
+    def select_loss_and_optim(self, model_params)->Tuple:
+        # During our training, using MSE results in better results, less num of concepts explored
         if self.args['loss_func'] == 'MSELoss':
             loss_func = torch.nn.MSELoss()
         elif self.args['loss_func'] == 'CrossEntropyLoss':
@@ -101,8 +98,26 @@ class Trainer:
         else:
             raise KeyError
 
-        optimizer = torch.optim.Adam(model.parameters(), lr=self.args['learning_rate'])
+        optimizer = torch.optim.Adam(model_params, lr=self.args['learning_rate'])
+        return loss_func, optimizer
 
+    def training_loop(self):
+        """
+         (1) Initialize the model
+         (2) Select the loss function and the optimizer
+         (3)
+
+        Parameter: None
+        ---------
+
+        Returns: NERO
+        ---------
+
+        """
+        # (1) Initialize the model.
+        model = self.neural_architecture_selection()
+        # (2) Select the loss function and Optimizer.
+        loss_func, optimizer = self.select_loss_and_optim(model_params=model.parameters())
         # (1) Set model in training mode.
         model.train()
         # (2) Send model to selected device.
@@ -203,6 +218,16 @@ class Trainer:
             plt.show()
 
     def start(self) -> NERO:
+        """
+         Train and Store
+
+        Parameter: None
+        ---------
+
+        Returns: NERO
+        ---------
+
+        """
         self.logger.info('Start the training phase')
         # (1) Training loop
         model = self.training_loop()

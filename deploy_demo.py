@@ -23,10 +23,6 @@ def load_target_class_expressions_and_instance_idx_mapping(args):
     """
     # target_class_expressions Must be empty and must be filled in an exactorder
     target_class_expressions = []
-    ncel_model, loading_time_to_add = load_nero(args)
-
-    exit(1)
-    load_nero()
     df = ddf.read_csv(args['path_of_experiment_folder'] + '/target_class_expressions.csv', dtype={'label_id': 'int',
                                                                                                   'name': 'object',
                                                                                                   'str_individuals': 'object',
@@ -118,7 +114,7 @@ def launch_service(nero):
             neg_str = negative_examples.split(",")
 
         with torch.no_grad():
-            report = nero.fit(str_pos=pos_str, str_neg=neg_str, topK=100)
+            report = nero.fit(str_pos=pos_str, str_neg=neg_str, topk=100)
         if len(pos_str) < 20:
             s = f'E^+:{",".join(pos_str)}\nE^-:{",".join(neg_str)}\n'
         else:
@@ -133,7 +129,7 @@ def launch_service(nero):
                 gr.inputs.Textbox(lines=5, placeholder=None, label='Negative Examples'),
                 gr.inputs.Slider(minimum=1, maximum=100),
                 "checkbox"],
-        outputs=[gr.outputs.Textbox(label='Learning Problem'), gr.outputs.Dataframe(label='Predictions')],
+        outputs=[gr.outputs.Textbox(label='Learning Problem'), gr.outputs.Dataframe(label='Predictions',type='pandas')],
         title='Rapid Induction of Description Logic Expressions via Nero',
         description='Click Random Examples & Submit.').launch()
 

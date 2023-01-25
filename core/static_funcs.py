@@ -32,7 +32,22 @@ import gc
 from .expression import TargetClassExpression, ClassExpression, UniversalQuantifierExpression, \
     ExistentialQuantifierExpression, Role
 from .refinement_operator import SimpleRefinement
+import time
+import functools
+import psutil
 
+def timeit(func):
+    @functools.wraps(func)
+    def timeit_wrapper(*args, **kwargs):
+        start_time = time.perf_counter()
+        result = func(*args, **kwargs)
+        end_time = time.perf_counter()
+        total_time = end_time - start_time
+        print(
+            f'Took {total_time:.4f} seconds | Current Memory Usage {psutil.Process(os.getpid()).memory_info().rss / 1000000: .5} in MB')
+        return result
+
+    return timeit_wrapper
 
 def single_universal_quantifier(*, kb, filler, atomic_look_up, role_look_up):
     renderer = DLSyntaxObjectRenderer()

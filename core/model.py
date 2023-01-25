@@ -395,32 +395,57 @@ class NERO:
 
         return self.pandas_series_to_exp(row)
 
-    def fit(self, str_pos: [str], str_neg: [str], topK: int = None, use_search=None) -> Dict:
+    def fit(self, str_pos: List[str], str_neg: List[str], topk: int = None, use_search=None) -> Dict:
         """
+         Predict a description logic concept given a learning problem.
+
+        Given a learning problem,
         Given set of positive and negative indviduals, fit returns
         {'Prediction': best_pred.name,
         'Instances': ...,
         'F-measure': ...,
         'NumClassTested': ...,
         'Runtime': ...}
+
+         Iterative over a set of entities E and a set of relation R : \forall e \in E and \forall r \in R f(e,r,x)
+         Return (e,r,x)\not\in G and  f(e,r,x) > confidence
+
+        Parameter
+        ---------
+        str_pos: List[str]
+
+        Positive example individuals
+
+        str_neg: List[str]
+
+        Negative example individuals
+
+        topk: int
+
+        Consider only top ranked k predefined description logic concepts as a possible prediction
+
+        Returns: Dict
+        ---------
+
         """
+
+        assert isinstance(str_pos, list)
+        assert isinstance(str_neg, list)
         # (1) Initialize learning problem.
-        self.predict_sanity_checking(pos=str_pos, neg=str_neg, topK=topK)
+        self.predict_sanity_checking(pos=str_pos, neg=str_neg, topK=topk)
         start_time = time.time()
         self.retrieve_counter = 0
         set_pos, set_neg = set(str_pos), set(str_neg)
-        idx_pos = self.str_to_index_mapping(str_pos)
-        idx_neg = self.str_to_index_mapping(str_neg)
+        idx_pos = torch.LongTensor([self.str_to_index_mapping(str_pos)])
+        idx_neg = torch.LongTensor([self.str_to_index_mapping(str_neg)])
         goal_found = False
 
         # (2) Initialize a priority queue for top K Target Expressions.
         top_prediction_queue = SearchTree()
         # (3) Predict scores and sort index target expressions in descending order of assigned scores.
-        sort_val, sort_idxs = torch.sort(self.forward(xpos=torch.LongTensor([idx_pos]),
-                                                      xneg=torch.LongTensor([idx_neg])), dim=1, descending=True)
-        sort_idxs = sort_idxs.cpu().numpy()[0]
+        sort_scores, sort_idxs = torch.topk(self.forward(xpos=idx_pos, xneg=idx_neg).flatten(), topk, largest=True)
         # (4) Iterate over the sorted index of target expressions.
-        for idx_target in sort_idxs[:topK]:
+        for idx_target in sort_idxs.detach().numpy():
             target_ce = self.select_target_expression(idx_target)
             # (5) Retrieval of instance.
             target_ce.str_individuals = self.retrieval_of_individuals(target_ce)

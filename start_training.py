@@ -25,13 +25,14 @@ torch.manual_seed(0)
 def main(args):
     Experiment(args).start()
 
+
 # OWL version 1 and OWL 2, our library only works with OWL 2
 if __name__ == '__main__':
     parser = ArgumentParser()
     # General
     parser.add_argument("--path_knowledge_base", type=str,
                         default='KGs/Family/Family.owl',
-                        #default='KGs/DBpedia/DBpedia.owl',
+                        # default='KGs/DBpedia/DBpedia.owl',
                         help='The absolute path of a knowledge base required.')
     parser.add_argument("--path_lp", type=str,
                         default='LPs/Family/lp_dl_learner.json',
@@ -50,7 +51,7 @@ if __name__ == '__main__':
                         default='DeepSet',
                         help='Nero is based on two deep-set neural network. Later we will add set transformer')
     parser.add_argument("--quality_function_training", type=str,
-                        default='fmeasure',)
+                        default='fmeasure', )
     parser.add_argument("--loss_func", type=str,
                         default='MSELoss',
                         help='[MSELoss,HuberLoss,CrossEntropyLoss]')
@@ -63,7 +64,7 @@ if __name__ == '__main__':
     # Hyperparameters of Neural Class Expression
     parser.add_argument("--num_embedding_dim", type=int, default=100, help='Number of embedding dimensions.')
     # Training Related
-    parser.add_argument("--learning_rate", type=float, default=0.01, help='Learning Rate')
+    parser.add_argument("--learning_rate", type=float, default=0.1, help='Learning Rate')
     parser.add_argument("--num_epochs", type=int, default=50, help='Number of iterations over the entire dataset.')
     parser.add_argument("--val_at_every_epochs", type=int, default=500, help='How often eval.')
 
@@ -73,8 +74,8 @@ if __name__ == '__main__':
                         help='Test the highest topK target expressions')
 
     # Analysis Related
-    parser.add_argument("--plot_embeddings", type=int, default=0, help='1 => Yes, 0 => No')
+    parser.add_argument("--plot_embeddings", type=int, default=1, help='1 => Yes, 0 => No')
     parser.add_argument('--use_search', default='None', help='None,SmartInit')
 
-    parser.add_argument("--eval_dl_learner", type=int, default=0, help='1 => Yes, 0 => No')
+    # parser.add_argument("--eval_dl_learner", type=int, default=1, help='1 => Yes, 0 => No')
     main(vars(parser.parse_args()))

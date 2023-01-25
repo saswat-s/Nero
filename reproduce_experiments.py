@@ -42,7 +42,6 @@ def run(args):
     path_of_json_learning_problems = args.path_of_json_learning_problems
     print('Loading Nero...')
     ncel_model, loading_time_to_add = load_nero(args)
-    print(f'Nero is loaded:{loading_time_to_add}')
 
     lp = dict()
     with open(path_of_json_learning_problems, 'r') as f:
@@ -65,7 +64,7 @@ def run(args):
 
         print('Nero learning..')
         report = ncel_model.fit(str_pos=v['positive_examples'], str_neg=v['negative_examples'],
-                                topK=args.topK,
+                                topk=args.topK,
                                 use_search=args.use_search)
         print(f'Nero: Prediction: {report["Prediction"]}\t F1-score: {report["F-measure"]:.3f}\t Num. explored Expressions: {report["NumClassTested"]}')
         # OUR MODEL
@@ -112,7 +111,7 @@ if __name__ == '__main__':
                         default=1, help='1 or 0')
     parser.add_argument("--path_dl_learner", type=str,
                         default=None
-                        # default=os.getcwd() + '/dllearner-1.4.0/'
+                        #default=os.getcwd() + '/dllearner-1.4.0/'
                         )
     parser.add_argument("--max_runtime_dl_learner", type=int, default=10)
     parser.add_argument('--use_search', default='None', help='None,SmartInit')

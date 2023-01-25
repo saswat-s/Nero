@@ -13,7 +13,6 @@ class TargetClassExpression:
         self.str_individuals = str_individuals
         self.type = type
         self.expression_chain = expression_chain
-
         self.num_individuals = len(self.str_individuals)
         """
         if self.idx_individuals is not None:

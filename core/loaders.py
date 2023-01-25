@@ -4,7 +4,7 @@ import time
 import json
 from .model import NERO
 from .neural_arch import DeepSet
-from .static_funcs import f_measure, ClosedWorld_ReasonerFactory
+from .static_funcs import f_measure, ClosedWorld_ReasonerFactory,timeit
 from .refinement_operator import SimpleRefinement
 from ontolearn import KnowledgeBase
 import pandas as pd
@@ -110,7 +110,7 @@ def load_pytorch_module(args: Dict, path_of_experiment_folder) -> torch.nn.Modul
     model.eval()
     return model
 
-
+@timeit
 def load_nero(args):
     """
     :param args: Namespace

@@ -21,9 +21,14 @@ Create a anaconda virtual environment and install dependencies.
 ```sh
 git clone https://github.com/dice-group/Nero
 # Create anaconda virtual environment
-conda env create -f environment.yml
-# Active virtual environment 
-conda activate nero
+conda create -n nero python=3.8.12 && conda activate nero
+# Install dependencies
+pip3 install torch==1.10
+pip3 install pandas==1.3.4
+pip3 install scikit-learn==0.24.2
+pip3 install seaborn==0.12.2
+pip3 install gradio==3.16.2
+pip3 install psutil==5.9.4
 # Install ontolearn library
 wget https://github.com/dice-group/Ontolearn/archive/refs/tags/0.4.0.zip
 unzip 0.4.0.zip
@@ -31,10 +36,6 @@ cd Ontolearn-0.4.0
 python -c 'from setuptools import setup; setup()' develop
 python -c "import ontolearn"
 cd ..
-```
-# Manuel Installation
-```sh
-pip install seaborn==0.12.1
 ```
 
 # Datasets and Learning Problems 
@@ -63,7 +64,7 @@ For each experiment, the following log info is stored.
 2021-11-29 10:04:06,090 - Experimenter - INFO - Total Runtime of the experiment:0.20418190956115723
 ```
 
-# Reproduce Results
+# Reproduce Results with Pretrained Models
 We have provided a test script that facilitates testing a pretrained model on different datasets with different learning problems.
 ```sh
 # Download DL-Learner
@@ -72,9 +73,7 @@ unzip dllearner-1.4.0.zip
 # Test the DL-learner framework
 dllearner-1.4.0/bin/cli dllearner-1.4.0/examples/father.conf
 # Download Pretrained models
-# https://drive.google.com/file/d/1JzXVZuk9isEWFWkS15xoDR8ZTQrelQgi/view?usp=share_link
-# Unzip the pretrained models
-unzip Best.zip
+wget --no-check-certificate --content-disposition https://hobbitdata.informatik.uni-leipzig.de/Nero/Best.zip && unzip Best.zip
 # Reproduce the reported results
 sh testing.sh
 ```
