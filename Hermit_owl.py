@@ -34,14 +34,14 @@ kb = Hermit_KnowledgeBase(url='/home/shrushti/Nero/dllearner-1.4.0/examples/fami
 # Retrieve all individuals from the knowledge base
 all_individuals = kb.get_individuals()
 print("All Individuals:")
-print(all_individuals)
+print(len(all_individuals))
 
 # Retrieve all atomic concepts from the knowledge base
 atomic_classes = kb.get_all_atomic_concepts()
 print("Atomic Concepts:")
-print(atomic_classes)
+print(len(atomic_classes))
 
 # Retrieve all properties from the knowledge base
 properties = kb.get_properties()
 print("Properties:")
-print(properties)
+print(len(properties))
